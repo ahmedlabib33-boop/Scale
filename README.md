@@ -23,6 +23,23 @@ A plain `http://192.168.x.x` address will not work.
   in Chrome (Chrome may ask for file access). A single HTML file can't register a service worker, so
   reopening a hosted copy offline relies on Chrome's cache and isn't guaranteed.
 
+Live: **https://vibroscale.vercel.app**
+
+## iPhone (Chrome or Safari) — experimental
+
+Every iPhone browser, Chrome included, runs on Apple's WebKit engine, which has **no Vibration API**,
+so no web page can run the motor continuously. On **iOS 18+** the app instead fires a rapid series of
+short haptic taps (the tap iOS plays when a switch-style checkbox toggles) and measures how strongly
+they shake the phone. Calibration and measuring work the same way; vibration length defaults to 4 s.
+
+- Tap **Allow** when asked for motion & orientation access. If you tapped *Don't Allow*, close the
+  tab completely and reopen the page.
+- Turn on *Settings → Sounds & Haptics → System Haptics* and turn off Low Power Mode.
+- Run *Sensor check → Test vibration* first: you should feel one tap immediately, and the result
+  should say *detected ✓*. If it says *not detected*, this iPhone/iOS version doesn't pass web
+  haptics through strongly enough — a native iOS app (Core Haptics + Core Motion) would be needed.
+- Expect a wider ± range than on Android (taps are brief, and the sensor only samples ~60 times/s).
+
 ## Test it first (Help & settings tab)
 
 1. **Sensor check → Start sensor.** Expect a sample rate around 60 Hz (Chrome's usual cap),

@@ -362,11 +362,18 @@ const CFG = {
   flatMin: 0.97,         // |gz|/|g| below this → not lying flat (~14°)
   shiftMax: 0.3,         // m/s² change of the gravity vector before/after → phone moved
   requestHz: 200,        // ask for the highest rate; browsers cap it (Chrome often at 60 Hz)
+  tapMs: 47,             // iPhone mode: interval between haptic taps (not a multiple of the 16.7 ms sample period)
+  tapJitterMs: 6,        // …plus random jitter so taps don't phase-lock with the sensor samples
   minWindowSamples: 12,
   fewWindowSamples: 50,
 };
 const KEYS = { settings: 'vibroscale.settings.v1', cal: 'vibroscale.calibration.v1', lang: 'vibroscale.lang' };
-const DEFAULT_SETTINGS = { duration: 2000, delay: 5, source: 'auto', sound: true };
+/* Platform. Every iPhone/iPad browser — Chrome included — runs on Apple's WebKit engine, which has no
+   Vibration API. There the app falls back to rapid short haptic taps (iOS 18+ "switch" checkbox). */
+const UA = navigator.userAgent || '';
+const IS_IOS = /iP(hone|ad|od)/.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1);
+const IOS_MAJOR = (() => { const m = UA.match(/OS (\d+)[_.]\d+(?:[_.]\d+)? like Mac OS X/); return m ? +m[1] : null; })();
+const DEFAULT_SETTINGS = { duration: IS_IOS ? 4000 : 2000, delay: 5, source: 'auto', sound: true };
 const RUN_COLORS = ['#2fd1b0', '#8ab4ff', '#f3b33d'];
 
 /* =====================================================================
@@ -420,7 +427,13 @@ en: {
   permDenied: 'Motion sensor access is blocked for this site. Tap the icon next to the address bar → Permissions → Motion sensors → Allow, then reload.',
   sensorErr: 'Could not start the accelerometer ({msg}).',
   noSensor: 'This browser has no accelerometer API. Use Chrome on Android.',
-  vibUnsupported: 'This browser has no Vibration API (e.g. Safari on iPhone, or a desktop browser). Use Chrome on Android.',
+  vibUnsupported: 'This browser can’t make the phone vibrate. Use Chrome on Android, or an iPhone with iOS 18 or newer.',
+  iosTooOld: 'iPhone mode needs iOS 18 or newer (this phone reports iOS {v}). Update in Settings → General → Software Update.',
+  bIOS: 'iPhone mode (experimental): Apple doesn’t let any iPhone browser — Chrome included — run the vibration motor continuously, so the app uses a rapid series of short haptic taps instead. Run the Sensor check first, and expect lower accuracy than on Android.',
+  noTaps: 'No haptic taps detected. Check that Settings → Sounds & Haptics → System Haptics is on and Low Power Mode is off. If the Sensor check also fails, this iPhone or iOS version doesn’t allow haptics from web pages.',
+  noData_ios: 'The motion sensor sends no data. Tap “Allow” when asked for motion & orientation access. If you chose “Don’t Allow”, close this tab completely and open the page again.',
+  permDenied_ios: 'Motion access was denied. Close this tab completely, open the page again and tap “Allow” when asked for motion & orientation access.',
+  exc_motor: 'motor (Vibration API)', exc_taps: 'haptic taps (iPhone, experimental)',
   vibBlocked: 'The browser blocked the vibration. Tap the page once and try again.',
   insecure: 'Sensors need a secure page. Open the app via https:// (e.g. GitHub Pages), localhost, or as a local file.',
   fewSamples: 'Too few sensor samples ({n}). The sensor rate is too low — try a longer vibration or the other sensor source in Settings.',
@@ -462,12 +475,13 @@ en: {
   secS: '{s} s', delayOff: 'None',
   diagTitle: 'Sensor check', diagIntro: 'Check that the accelerometer and the vibration motor work before calibrating.',
   diagStart: 'Start sensor', diagStop: 'Stop sensor', diagVib: 'Test vibration',
-  dSecure: 'Secure page', dVibApi: 'Vibration API', dSensorApi: 'Sensor APIs', dWakeLock: 'Keep screen on', dPerm: 'Motion permission',
+  dSecure: 'Secure page', dVibApi: 'Vibration', dSensorApi: 'Sensor APIs', dWakeLock: 'Keep screen on', dPerm: 'Motion permission',
   dSource: 'Source', dRate: 'Sample rate', dAccel: 'x / y / z', dGravity: '|a|', dNoise: 'Noise (RMS)', dOrient: 'Orientation', dVibRes: 'Vibration test',
   yes: 'yes', no: 'no', none: 'none', testing: 'testing…',
   perm_granted: 'allowed', perm_denied: 'blocked', perm_prompt: 'will ask', perm_unknown: 'unknown',
   vibOk: 'detected ✓ ({a} vs noise {b} m/s², ×{r})',
   vibBad: 'not detected ✗ ({a} vs noise {b} m/s²) — check Android vibration settings, Do Not Disturb and battery saver',
+  vibBadTaps: 'not detected ✗ ({a} vs noise {b} m/s²) — turn on System Haptics and turn off Low Power Mode',
   helpTitle: 'How to measure', howTitle: 'How it works',
   helpHtml: `<ol>
 <li><b>Calibrate first</b> on the Calibrate tab: at least 3 known weights (5–6 is better), including 0 g.</li>
@@ -487,7 +501,8 @@ en: {
 </ul>`,
   howHtml: `<p>The vibration motor shakes the phone with a roughly constant force. The heavier the load on the phone, the less it moves, so the accelerometer sees a smaller vibration.</p>
 <p>For each run the app records the accelerometer, removes gravity with a high-pass filter on each axis, and takes the RMS of the filtered acceleration over the steady part of the vibration (the first and last 0.3 s are ignored). Calibration fits linear, 1/x and exponential curves of amplitude against weight and keeps the one with the best R². The ± range combines the calibration residuals with the spread of the 3 runs.</p>
-<p>Chrome often delivers sensor data at only about 60 Hz, far below the motor’s 150–250 Hz. The amplitude is still usable, but the dominant frequency shown is an apparent (aliased) value.</p>`,
+<p>Chrome often delivers sensor data at only about 60 Hz, far below the motor’s 150–250 Hz. The amplitude is still usable, but the dominant frequency shown is an apparent (aliased) value.</p>
+<p><b>iPhone:</b> every iPhone browser, Chrome included, uses Apple’s WebKit engine, which has no Vibration API. On iOS 18+ the app instead fires a rapid series of short haptic taps (the tap iOS plays when a switch-style checkbox is toggled) and measures how strongly they shake the phone. This is experimental and usually less precise than the continuous motor on Android.</p>`,
 },
 ar: {
   appName: 'ميزان الاهتزاز',
@@ -536,7 +551,13 @@ ar: {
   permDenied: 'الوصول إلى مستشعر الحركة محظور لهذا الموقع. اضغط الأيقونة بجوار شريط العنوان ← الأذونات ← أجهزة استشعار الحركة ← السماح، ثم أعد تحميل الصفحة.',
   sensorErr: 'تعذر تشغيل مقياس التسارع ({msg}).',
   noSensor: 'لا توجد واجهة لمقياس التسارع في هذا المتصفح. استخدم كروم على أندرويد.',
-  vibUnsupported: 'هذا المتصفح لا يدعم واجهة الاهتزاز (مثل سفاري على آيفون أو متصفح الحاسوب). استخدم كروم على أندرويد.',
+  vibUnsupported: 'هذا المتصفح لا يستطيع تشغيل الاهتزاز. استخدم كروم على أندرويد، أو آيفون بنظام iOS 18 أو أحدث.',
+  iosTooOld: 'وضع الآيفون يحتاج إلى iOS 18 أو أحدث (هذا الهاتف يعمل بـ iOS {v}). حدّث النظام من الإعدادات ← عام ← تحديث البرامج.',
+  bIOS: 'وضع الآيفون (تجريبي): لا تسمح Apple لأي متصفح على الآيفون — بما فيه كروم — بتشغيل محرك الاهتزاز بشكل متواصل، لذلك يستخدم التطبيق سلسلة سريعة من النقرات اللمسية القصيرة بدلًا منه. شغّل «فحص المستشعرات» أولًا، وتوقّع دقة أقل من أندرويد.',
+  noTaps: 'لم تُكتشف النقرات اللمسية. تأكد من تفعيل الإعدادات ← الأصوات والحس اللمسي ← الحس اللمسي للنظام، ومن إيقاف وضع الطاقة المنخفضة. إذا فشل «فحص المستشعرات» أيضًا، فهذا الآيفون أو إصدار iOS لا يسمح بالحس اللمسي من صفحات الويب.',
+  noData_ios: 'مستشعر الحركة لا يرسل بيانات. اضغط «السماح» عند طلب الوصول إلى الحركة والاتجاه. إذا اخترت «عدم السماح» فأغلق هذا التبويب تمامًا ثم افتح الصفحة من جديد.',
+  permDenied_ios: 'تم رفض الوصول إلى الحركة. أغلق هذا التبويب تمامًا، ثم افتح الصفحة من جديد واضغط «السماح» عند طلب الوصول إلى الحركة والاتجاه.',
+  exc_motor: 'المحرك (Vibration API)', exc_taps: 'نقرات لمسية (آيفون، تجريبي)',
   vibBlocked: 'منع المتصفح الاهتزاز. المس الصفحة مرة واحدة ثم أعد المحاولة.',
   insecure: 'تحتاج المستشعرات إلى صفحة آمنة. افتح التطبيق عبر https:// (مثل GitHub Pages) أو localhost أو كملف محلي.',
   fewSamples: 'عدد عينات المستشعر قليل جدًا ({n}). المعدل منخفض — جرّب مدة اهتزاز أطول أو مصدر المستشعر الآخر من الإعدادات.',
@@ -578,12 +599,13 @@ ar: {
   secS: '{s} ث', delayOff: 'بدون',
   diagTitle: 'فحص المستشعرات', diagIntro: 'تأكد من عمل مقياس التسارع ومحرك الاهتزاز قبل المعايرة.',
   diagStart: 'تشغيل المستشعر', diagStop: 'إيقاف المستشعر', diagVib: 'اختبار الاهتزاز',
-  dSecure: 'صفحة آمنة', dVibApi: 'واجهة الاهتزاز', dSensorApi: 'واجهات المستشعر', dWakeLock: 'إبقاء الشاشة مضاءة', dPerm: 'إذن الحركة',
+  dSecure: 'صفحة آمنة', dVibApi: 'الاهتزاز', dSensorApi: 'واجهات المستشعر', dWakeLock: 'إبقاء الشاشة مضاءة', dPerm: 'إذن الحركة',
   dSource: 'المصدر', dRate: 'معدل العينات', dAccel: 'x / y / z', dGravity: '|a|', dNoise: 'الضوضاء (RMS)', dOrient: 'الاتجاه', dVibRes: 'اختبار الاهتزاز',
   yes: 'نعم', no: 'لا', none: 'لا يوجد', testing: 'جارٍ الاختبار…',
   perm_granted: 'مسموح', perm_denied: 'محظور', perm_prompt: 'سيُطلب', perm_unknown: 'غير معروف',
   vibOk: 'تم اكتشافه ✓ ({a} مقابل ضوضاء {b} م/ث²، ×{r})',
   vibBad: 'لم يُكتشف ✗ ({a} مقابل ضوضاء {b} م/ث²) — تحقق من إعدادات الاهتزاز و«عدم الإزعاج» وموفر البطارية',
+  vibBadTaps: 'لم يُكتشف ✗ ({a} مقابل ضوضاء {b} م/ث²) — فعّل الحس اللمسي للنظام وأوقف وضع الطاقة المنخفضة',
   helpTitle: 'طريقة القياس', howTitle: 'كيف يعمل',
   helpHtml: `<ol>
 <li><b>ابدأ بالمعايرة</b> من تبويب «معايرة»: 3 أوزان معروفة على الأقل (ويُفضّل 5–6)، منها 0 جم.</li>
@@ -603,7 +625,8 @@ ar: {
 </ul>`,
   howHtml: `<p>يهز محرك الاهتزاز الهاتف بقوة ثابتة تقريبًا. كلما زاد الحمل على الهاتف قلّت حركته، فيقيس مقياس التسارع اهتزازًا أضعف.</p>
 <p>في كل محاولة يسجّل التطبيق قراءات مقياس التسارع، ويزيل الجاذبية بمرشّح تمرير عالٍ على كل محور، ثم يحسب قيمة RMS للتسارع المُرشَّح خلال الجزء الثابت من الاهتزاز (مع تجاهل أول وآخر 0.3 ثانية). أثناء المعايرة يطابق التطبيق منحنيات خطية وعكسية (<bdi dir="ltr">1/x</bdi>) وأُسّية بين الشدة والوزن ويختار الأفضل حسب R². ويجمع نطاق ± بين أخطاء المعايرة والتفاوت بين المحاولات الثلاث.</p>
-<p>غالبًا ما يرسل كروم بيانات المستشعر بمعدل 60 هرتز تقريبًا فقط، وهو أقل بكثير من تردد المحرك (150–250 هرتز). تبقى الشدة صالحة للاستخدام، لكن «التردد السائد» المعروض قيمة ظاهرية (aliased).</p>`,
+<p>غالبًا ما يرسل كروم بيانات المستشعر بمعدل 60 هرتز تقريبًا فقط، وهو أقل بكثير من تردد المحرك (150–250 هرتز). تبقى الشدة صالحة للاستخدام، لكن «التردد السائد» المعروض قيمة ظاهرية (aliased).</p>
+<p><b>الآيفون:</b> كل متصفحات الآيفون، ومنها كروم، تعمل بمحرك WebKit من Apple الذي لا يدعم واجهة الاهتزاز. على iOS 18 أو أحدث يُصدر التطبيق بدلًا من ذلك سلسلة سريعة من النقرات اللمسية القصيرة (النقرة التي يُصدرها iOS عند تبديل مفتاح التشغيل) ويقيس مدى اهتزاز الهاتف بها. هذه الميزة تجريبية وغالبًا أقل دقة من المحرك المتواصل على أندرويد.</p>`,
 },
 };
 
@@ -618,6 +641,8 @@ const store = {
 class AppError extends Error { constructor(code, vars) { super(code); this.code = code; this.vars = vars || {}; } }
 const E = (code, vars) => new AppError(code, vars);
 const abortErr = s => (s && s.reason instanceof AppError) ? s.reason : E('cancelled');
+// iOS WebKit reports accelerationIncludingGravity with the opposite sign to Android (and the spec).
+const zUp = z => (IS_IOS ? -z : z) >= 0;
 const toAppError = e => e instanceof AppError ? e : E('sensorErr', { msg: (e && e.message) || String(e) });
 
 const mean = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : NaN;
@@ -729,6 +754,7 @@ function t(key, vars, plain) {
   return s;
 }
 const tp = (k, v) => t(k, v, true); // plain: for canvas, confirm() and aria labels
+const errKey = code => (IS_IOS && I18N.en[code + '_ios']) ? code + '_ios' : code;
 
 function applyStatic() {
   document.documentElement.lang = lang;
@@ -871,7 +897,7 @@ function analyzeRun(rec) {
   return {
     rms, base: isFinite(base) ? base : 0, fs: U.fs, nWin: w1 - w0,
     freq: dominantFreq([hx, hy, hz], w0, w1, U.fs),
-    g, gNorm, flat: gNorm > 0 ? Math.abs(g[2]) / gNorm : 0, orient: g[2] >= 0 ? 'up' : 'down',
+    g, gNorm, flat: gNorm > 0 ? Math.abs(g[2]) / gNorm : 0, orient: zUp(g[2]) ? 'up' : 'down',
     shift: gPost ? Math.hypot(gPost[0] - g[0], gPost[1] - g[1], gPost[2] - g[2]) : 0,
   };
 }
@@ -1105,9 +1131,60 @@ const hub = {
   },
 };
 
+/* =====================================================================
+   Excitation: the vibration motor (Vibration API) or, on iPhone, haptic taps
+   ===================================================================== */
+function excitationKind() {
+  if (typeof navigator.vibrate === 'function') return 'motor';
+  if (IS_IOS) return 'taps';
+  return null;
+}
+// iOS 18+ plays a short haptic when a <input type="checkbox" switch> is toggled; a label click toggles it.
+function hapticTap() {
+  try {
+    const label = document.createElement('label');
+    label.setAttribute('aria-hidden', 'true');
+    label.style.display = 'none';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.setAttribute('switch', '');
+    input.tabIndex = -1;
+    label.appendChild(input);
+    document.body.appendChild(label);
+    label.click();
+    label.remove();
+  } catch (_) { /* ignore */ }
+}
+const exciter = {
+  timer: null,
+  start(durMs) {
+    const kind = excitationKind();
+    if (kind === 'motor') { try { return navigator.vibrate(durMs) !== false; } catch (_) { return false; } }
+    if (kind === 'taps') {
+      this.stop();
+      const end = performance.now() + durMs;
+      const step = () => {
+        this.timer = null;
+        if (performance.now() >= end) return;
+        hapticTap();
+        this.timer = setTimeout(step, CFG.tapMs + (Math.random() * 2 - 1) * CFG.tapJitterMs);
+      };
+      step();
+      return true;
+    }
+    return false;
+  },
+  stop() {
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+    try { if (typeof navigator.vibrate === 'function') navigator.vibrate(0); } catch (_) { /* ignore */ }
+  },
+};
+
 function capabilityBlocker() {
   if (!window.isSecureContext) return E('insecure');
-  if (typeof navigator.vibrate !== 'function') return E('vibUnsupported');
+  const ek = excitationKind();
+  if (!ek) return E('vibUnsupported');
+  if (ek === 'taps' && IOS_MAJOR && IOS_MAJOR < 18) return E('iosTooOld', { v: IOS_MAJOR });
   if (!('Accelerometer' in window) && !('DeviceMotionEvent' in window)) return E('noSensor');
   return null;
 }
@@ -1130,7 +1207,7 @@ function record({ baselineMs, durMs, postMs, signal, trace }) {
       finished = true; hub.off(onS); timers.forEach(clearTimeout); clearInterval(wd);
       if (signal) signal.removeEventListener('abort', onAbort);
     };
-    const fail = e => { if (finished) return; cleanup(); try { navigator.vibrate(0); } catch (_) {} reject(e); };
+    const fail = e => { if (finished) return; cleanup(); exciter.stop(); reject(e); };
     const onAbort = () => fail(abortErr(signal));
     const wd = setInterval(() => { if (performance.now() - hub.lastArrival > 1500) fail(E('sensorStopped')); }, 300);
     if (signal) { if (signal.aborted) { onAbort(); return; } signal.addEventListener('abort', onAbort); }
@@ -1139,9 +1216,7 @@ function record({ baselineMs, durMs, postMs, signal, trace }) {
       if (finished) return;
       tVib = performance.now();
       if (trace) trace.tVib = tVib;
-      let ok = false;
-      try { ok = navigator.vibrate(durMs); } catch (_) { ok = false; }
-      if (ok === false) { fail(E('vibBlocked')); return; }
+      if (!exciter.start(durMs)) { fail(E('vibBlocked')); return; }
       timers.push(setTimeout(() => {
         if (finished) return;
         cleanup();
@@ -1244,7 +1319,7 @@ async function startSession(area) {
     else { setStatus(area, null); errors[area] = err; renderMessages(); beep('error'); }
     setBar(area, 0);
   } finally {
-    try { navigator.vibrate(0); } catch (_) {}
+    exciter.stop();
     releaseWakeLock();
     if (!diag) hub.stop();
     busy = null;
@@ -1255,14 +1330,14 @@ async function startSession(area) {
 
 function cancelSession() {
   if (!busy) return;
-  try { navigator.vibrate(0); } catch (_) {}
+  exciter.stop();
   busy.ctrl.abort(E('cancelled'));
 }
 
 function summarizeRuns(runs, still, kind) {
   const warnings = [];
   const used = runs.filter(r => r.rms >= Math.max(CFG.vibAbsMin, CFG.vibRatioMin * r.base));
-  if (!used.length) throw E('noVibration');
+  if (!used.length) throw E(excitationKind() === 'taps' ? 'noTaps' : 'noVibration');
   if (used.length < runs.length) warnings.push({ k: 'wWeakVib', v: { k: runs.length - used.length } });
   const amps = used.map(r => r.rms);
   const m = mean(amps), s = sd(amps), cv = m > 0 ? s / m : 0;
@@ -1402,6 +1477,7 @@ async function testVibration() {
   errors.diag = null; renderMessages();
   const blocker = capabilityBlocker();
   if (blocker) { errors.diag = blocker; renderMessages(); return; }
+  if (excitationKind() === 'taps') hapticTap();   // immediate tap you can feel: confirms iOS haptics work at all
   const autoStarted = !diag;
   if (!diag) { await startDiag(); if (!diag || diag.starting) return; }
   diag.vibBusy = true; diagVib = null; renderDiag();
@@ -1409,7 +1485,7 @@ async function testVibration() {
     await wait(400);
     const rec = await record({ baselineMs: 600, durMs: 1000, postMs: 300 });
     const r = analyzeRun(rec);
-    diagVib = { rms: r.rms, base: r.base, ok: r.rms >= Math.max(CFG.vibAbsMin, CFG.vibRatioMin * r.base), fs: r.fs };
+    diagVib = { rms: r.rms, base: r.base, ok: r.rms >= Math.max(CFG.vibAbsMin, CFG.vibRatioMin * r.base), fs: r.fs, taps: excitationKind() === 'taps' };
   } catch (e) {
     errors.diag = toAppError(e);
   } finally {
@@ -1441,12 +1517,14 @@ function kvRows(dl, rows) {
 function computeBanners() {
   banners = [];
   if (!window.isSecureContext) banners.push({ kind: 'err', k: 'insecure' });
-  if (typeof navigator.vibrate !== 'function') banners.push({ kind: 'err', k: 'vibUnsupported' });
+  const ek = excitationKind();
+  if (!ek) banners.push({ kind: 'err', k: 'vibUnsupported' });
+  else if (ek === 'taps') banners.push(IOS_MAJOR && IOS_MAJOR < 18 ? { kind: 'err', k: 'iosTooOld', v: { v: IOS_MAJOR } } : { kind: 'info', k: 'bIOS' });
   if (!('Accelerometer' in window) && !('DeviceMotionEvent' in window)) banners.push({ kind: 'err', k: 'noSensor' });
   if (permState === 'denied') banners.push({ kind: 'err', k: 'permDenied' });
-  if (!banners.length && !/Android/i.test(navigator.userAgent)) banners.push({ kind: 'info', k: 'bNotAndroid' });
+  if (!banners.length && !IS_IOS && !/Android/i.test(UA)) banners.push({ kind: 'info', k: 'bNotAndroid' });
 }
-function renderBanners() { $('banners').replaceChildren(...banners.map(b => alertEl(b.kind, t(b.k)))); }
+function renderBanners() { $('banners').replaceChildren(...banners.map(b => alertEl(b.kind, t(errKey(b.k), b.v)))); }
 
 function renderChip() {
   const chip = $('calChip'), fit = currentFit;
@@ -1465,15 +1543,15 @@ function setBar(area, f) { $(area === 'measure' ? 'measBar' : 'calBar').style.wi
 
 function renderMessages() {
   const m = $('measMsg'); m.replaceChildren();
-  if (errors.measure) m.appendChild(alertEl('err', t(errors.measure.code, errors.measure.vars)));
+  if (errors.measure) m.appendChild(alertEl('err', t(errKey(errors.measure.code), errors.measure.vars)));
   const c = $('calMsg'); c.replaceChildren();
-  if (errors.cal) c.appendChild(alertEl('err', t(errors.cal.code, errors.cal.vars)));
+  if (errors.cal) c.appendChild(alertEl('err', t(errKey(errors.cal.code), errors.cal.vars)));
   if (calNote) {
     c.appendChild(alertEl(calNote.kind, t(calNote.k, calNote.v)));
     for (const w of calNote.warnings || []) c.appendChild(alertEl('warn', t(w.k, w.v)));
   }
   const d = $('diagMsg'); d.replaceChildren();
-  if (errors.diag) d.appendChild(alertEl('err', t(errors.diag.code, errors.diag.vars)));
+  if (errors.diag) d.appendChild(alertEl('err', t(errKey(errors.diag.code), errors.diag.vars)));
 }
 
 function setBusyUI() {
@@ -1606,7 +1684,7 @@ function renderDiag() {
   const apis = [('Accelerometer' in window) && 'Accelerometer', ('DeviceMotionEvent' in window) && 'DeviceMotion'].filter(Boolean).join(', ') || t('none');
   kvRows($('diagCaps'), [
     [t('dSecure'), window.isSecureContext ? yes : no, window.isSecureContext ? 'good' : 'bad'],
-    [t('dVibApi'), typeof navigator.vibrate === 'function' ? yes : no, typeof navigator.vibrate === 'function' ? 'good' : 'bad'],
+    [t('dVibApi'), excitationKind() ? t('exc_' + excitationKind()) : t('none'), excitationKind() === 'motor' ? 'good' : excitationKind() ? '' : 'bad'],
     [t('dSensorApi'), apis],
     [t('dWakeLock'), 'wakeLock' in navigator ? yes : no],
     [t('dPerm'), t('perm_' + permState), permState === 'denied' ? 'bad' : ''],
@@ -1625,11 +1703,11 @@ function renderDiag() {
       rows.push([t('dAccel'), l.map(v => v.toFixed(2)).join(' / ')]);
       rows.push([t('dGravity'), `${gn.toFixed(2)} ${t('unitAcc')}`]);
       rows.push([t('dNoise'), `${fmtA(d.noise)} ${t('unitAcc')}`]);
-      rows.push([t('dOrient'), t(l[2] >= 0 ? 'orient_up' : 'orient_down')]);
+      rows.push([t('dOrient'), t(zUp(l[2]) ? 'orient_up' : 'orient_down')]);
     }
   }
   if (diag && diag.vibBusy) rows.push([t('dVibRes'), t('testing')]);
-  else if (diagVib) rows.push([t('dVibRes'), t(diagVib.ok ? 'vibOk' : 'vibBad', { a: fmtA(diagVib.rms), b: fmtA(diagVib.base), r: (diagVib.rms / Math.max(diagVib.base, 1e-4)).toFixed(0) }), diagVib.ok ? 'good' : 'bad']);
+  else if (diagVib) rows.push([t('dVibRes'), t(diagVib.ok ? 'vibOk' : diagVib.taps ? 'vibBadTaps' : 'vibBad', { a: fmtA(diagVib.rms), b: fmtA(diagVib.base), r: (diagVib.rms / Math.max(diagVib.base, 1e-4)).toFixed(0) }), diagVib.ok ? 'good' : 'bad']);
   kvRows($('diagLive'), rows);
 }
 

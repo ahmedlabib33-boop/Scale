@@ -371,9 +371,12 @@ const KEYS = { settings: 'vibroscale.settings.v1', cal: 'vibroscale.calibration.
 /* Platform. Every iPhone/iPad browser — Chrome included — runs on Apple's WebKit engine, which has no
    Vibration API. There the app falls back to rapid short haptic taps (iOS 18+ "switch" checkbox). */
 const UA = navigator.userAgent || '';
-const IS_IOS = /iP(hone|ad|od)/.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1);
+const IS_IOS = /iP(hone|ad|od)/.test(UA) || (/Macintosh/.test(UA) && navigator.maxTouchPoints > 1);  // any WebKit-on-iOS device
+const IS_IPHONE = /iPhone/.test(UA);   // only iPhones have a Taptic Engine (iPad / iPod touch don't)
 const IOS_MAJOR = (() => { const m = UA.match(/OS (\d+)[_.]\d+(?:[_.]\d+)? like Mac OS X/); return m ? +m[1] : null; })();
-const DEFAULT_SETTINGS = { duration: IS_IOS ? 4000 : 2000, delay: 5, source: 'auto', sound: true };
+// How the phone is shaken: the vibration motor, rapid haptic taps (iPhone), or nothing available.
+const EXC = typeof navigator.vibrate === 'function' ? 'motor' : IS_IPHONE ? 'taps' : null;
+const DEFAULT_SETTINGS = { duration: EXC === 'taps' ? 4000 : 2000, delay: 5, source: 'auto', sound: true };
 const RUN_COLORS = ['#2fd1b0', '#8ab4ff', '#f3b33d'];
 
 /* =====================================================================
@@ -421,6 +424,7 @@ en: {
   wRate: 'Sensor rate ({now} Hz) differs from calibration ({cal} Hz). Recalibrate if results look wrong.',
   wDur: 'Vibration length ({now} s) differs from calibration ({cal} s).',
   wNoCal: 'Not calibrated — showing the raw vibration amplitude only.',
+  wExc: 'This calibration was made with {a}, but this device uses {b}. Recalibrate on this device.',
   wFewSamples: 'Only {n} sensor samples were analysed per run ({fs} Hz). A longer vibration (Settings) improves precision.',
   noVibration: 'No vibration detected (or the object is too heavy). Check that vibration is on in Android Settings → Sound & vibration, and that Do Not Disturb and battery saver are off. The Sensor check on the Help tab can test this.',
   noData: 'The motion sensor sends no data. In Chrome: ⋮ → Settings → Site settings → Motion sensors → Allow, then reload.',
@@ -439,7 +443,7 @@ en: {
   fewSamples: 'Too few sensor samples ({n}). The sensor rate is too low — try a longer vibration or the other sensor source in Settings.',
   hidden: 'Stopped: the page was hidden or the screen turned off.',
   sensorStopped: 'The sensor stopped sending data during the measurement.',
-  badWeight: 'Enter the known weight in grams (e.g. 0, 20, 50).',
+  badWeight: 'Enter the known weight in grams, e.g. 0, 20 or 1000 (no thousands separators).',
   bNotAndroid: 'Built for Chrome on Android. Other browsers and desktops may lack vibration or motion sensors.',
   calTitle: 'Calibration',
   calIntro: 'Measure several known weights, including 0 g (nothing on the phone). Each one is measured 3 times and averaged. Use the same table, phone case, orientation and object position you will use when measuring.',
@@ -545,6 +549,7 @@ ar: {
   wRate: 'معدل المستشعر ({now} هرتز) يختلف عن المعايرة ({cal} هرتز). أعد المعايرة إذا بدت النتائج خاطئة.',
   wDur: 'مدة الاهتزاز ({now} ث) تختلف عن المعايرة ({cal} ث).',
   wNoCal: 'بدون معايرة — تظهر شدة الاهتزاز فقط.',
+  wExc: 'هذه المعايرة أُجريت باستخدام {a}، لكن هذا الجهاز يستخدم {b}. أعد المعايرة على هذا الجهاز.',
   wFewSamples: 'تم تحليل {n} عينة فقط في كل محاولة ({fs} هرتز). مدة اهتزاز أطول (من الإعدادات) تحسّن الدقة.',
   noVibration: 'لم يُكتشف اهتزاز (أو أن الجسم ثقيل جدًا). تأكد من تفعيل الاهتزاز في إعدادات أندرويد ← الصوت والاهتزاز، ومن إيقاف «عدم الإزعاج» وموفر البطارية. يمكنك اختبار ذلك من «فحص المستشعرات» في صفحة المساعدة.',
   noData: 'مستشعر الحركة لا يرسل بيانات. في كروم: ⋮ ← الإعدادات ← إعدادات المواقع ← أجهزة استشعار الحركة ← السماح، ثم أعد تحميل الصفحة.',
@@ -563,7 +568,7 @@ ar: {
   fewSamples: 'عدد عينات المستشعر قليل جدًا ({n}). المعدل منخفض — جرّب مدة اهتزاز أطول أو مصدر المستشعر الآخر من الإعدادات.',
   hidden: 'توقف القياس: أُخفيت الصفحة أو انطفأت الشاشة.',
   sensorStopped: 'توقف المستشعر عن إرسال البيانات أثناء القياس.',
-  badWeight: 'أدخل الوزن المعروف بالجرام (مثل 0 أو 20 أو 50).',
+  badWeight: 'أدخل الوزن المعروف بالجرام، مثل 0 أو 20 أو 1000 (بدون فواصل الآلاف).',
   bNotAndroid: 'مصمم لكروم على أندرويد. قد لا تتوفر واجهات الاهتزاز أو مستشعر الحركة في المتصفحات الأخرى أو على الحاسوب.',
   calTitle: 'المعايرة',
   calIntro: 'قِس عدة أوزان معروفة، منها 0 جم (لا شيء على الهاتف). تُقاس كل نقطة 3 مرات ويُحسب المتوسط. استخدم نفس الطاولة وغطاء الهاتف واتجاهه وموضع الجسم الذي ستستخدمه عند القياس.',
@@ -641,8 +646,8 @@ const store = {
 class AppError extends Error { constructor(code, vars) { super(code); this.code = code; this.vars = vars || {}; } }
 const E = (code, vars) => new AppError(code, vars);
 const abortErr = s => (s && s.reason instanceof AppError) ? s.reason : E('cancelled');
-// iOS WebKit reports accelerationIncludingGravity with the opposite sign to Android (and the spec).
-const zUp = z => (IS_IOS ? -z : z) >= 0;
+// Samples follow the spec/Android convention (+9.81 on z when lying screen-up); iOS input is normalised on arrival.
+const zUp = z => z >= 0;
 const toAppError = e => e instanceof AppError ? e : E('sensorErr', { msg: (e && e.message) || String(e) });
 
 const mean = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : NaN;
@@ -670,12 +675,13 @@ function wait(ms, signal) {
 /* Accepts "12.5", "12,5", Arabic-Indic digits "١٢٫٥", and an optional unit. */
 function parseWeight(str) {
   if (str == null) return null;
-  const s = String(str).trim()
+  let s = String(str).trim()
     .replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660))
     .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06F0))
-    .replace(/[٫,]/g, '.')
     .replace(/\s+/g, '')
     .replace(/(grams?|gr|g|جرام|جم|غ)$/i, '');
+  if (/^\d{1,3}([,\u066C]\d{3})+$/.test(s)) return null;   // "1,000": thousands separator or decimal comma? Don't guess.
+  s = s.replace(/[\u066B,]/g, '.');
   if (!/^(\d+\.?\d*|\.\d+)$/.test(s)) return null;
   const v = parseFloat(s);
   return isFinite(v) && v >= 0 && v <= 10000 ? v : null;
@@ -693,6 +699,7 @@ let lastResult = null;
 let busy = null;          // { mode:'measure'|'cal', ctrl:AbortController, phase, runIdx }
 let diag = null;          // live sensor check
 let diagVib = null;       // last vibration test
+let vibTesting = false;   // Sensor check → Test vibration is running
 let calNote = null;       // { kind, k, v, warnings }
 let permState = 'unknown';
 let banners = [];
@@ -701,11 +708,12 @@ const traces = { measure: [], cal: [] };
 const statuses = { measure: { k: 'stIdle' }, cal: { k: 'stIdleCal' } };
 const errors = { measure: null, cal: null, diag: null };
 
+function sourceAvailable(v) { return v === 'generic' ? 'Accelerometer' in window : v === 'devicemotion' ? 'DeviceMotionEvent' in window : true; }
 function loadSettings() {
   const s = Object.assign({}, DEFAULT_SETTINGS, store.get(KEYS.settings, {}) || {});
   if (![2000, 3000, 4000].includes(s.duration)) s.duration = DEFAULT_SETTINGS.duration;
   if (![0, 3, 5, 10].includes(s.delay)) s.delay = DEFAULT_SETTINGS.delay;
-  if (!['auto', 'generic', 'devicemotion'].includes(s.source)) s.source = 'auto';
+  if (!['auto', 'generic', 'devicemotion'].includes(s.source) || !sourceAvailable(s.source)) s.source = 'auto';
   s.sound = s.sound !== false;
   return s;
 }
@@ -724,6 +732,7 @@ function sanitizeCal(c) {
       fs: num(p.fs), orient: p.orient === 'up' || p.orient === 'down' ? p.orient : null,
       kind: p.kind === 'generic' || p.kind === 'devicemotion' ? p.kind : null,
       dur: num(p.dur), freq: num(p.freq), t: num(p.t) || Date.now(),
+      exc: p.exc === 'motor' || p.exc === 'taps' ? p.exc : null,
     });
   }
   points.sort((a, b) => a.w - b.w);
@@ -733,7 +742,7 @@ function loadCal() { return sanitizeCal(store.get(KEYS.cal, null)) || { version:
 const saveCal = () => store.set(KEYS.cal, cal);
 function calMeta() {
   const p = cal.points;
-  return { orient: mode(p.map(x => x.orient)), fs: median(p.map(x => x.fs).filter(x => x > 0)), dur: mode(p.map(x => x.dur)), kind: mode(p.map(x => x.kind)) };
+  return { orient: mode(p.map(x => x.orient)), fs: median(p.map(x => x.fs).filter(x => x > 0)), dur: mode(p.map(x => x.dur)), kind: mode(p.map(x => x.kind)), exc: mode(p.map(x => x.exc)) };
 }
 
 /* =====================================================================
@@ -1030,6 +1039,8 @@ function estimateWeight(fit, amp, sem) {
    ===================================================================== */
 const hub = {
   kind: null, active: false, listeners: new Set(), lastArrival: 0, _stop: null,
+  gen: 0,          // bumped by stop(); a start that finishes after a stop() shuts its sensor down again
+  pending: null,   // the start in progress, so a second start() waits instead of opening another sensor
   on(fn) { this.listeners.add(fn); },
   off(fn) { this.listeners.delete(fn); },
   emit(t, x, y, z) {
@@ -1037,23 +1048,36 @@ const hub = {
     for (const fn of this.listeners) { try { fn(t, x, y, z); } catch (e) { console.error(e); } }
   },
   async start(pref) {
+    if (this.pending) { try { await this.pending; } catch (_) { /* retry below */ } }
     if (this.active && (pref === 'auto' || pref === this.kind)) return this.kind;
     this.stop();
+    const p = this._open(pref, this.gen);
+    this.pending = p;
+    try { return await p; } finally { if (this.pending === p) this.pending = null; }
+  },
+  async _open(pref, gen) {
     const order = pref === 'generic' ? ['generic'] : pref === 'devicemotion' ? ['devicemotion'] : ['generic', 'devicemotion'];
     const errs = [];
     for (const k of order) {
+      if (gen !== this.gen) throw E('cancelled');
       if (k === 'generic' && !('Accelerometer' in window)) { errs.push(E('noSensor')); continue; }
       if (k === 'devicemotion' && !('DeviceMotionEvent' in window)) { errs.push(E('noSensor')); continue; }
-      try {
-        await (k === 'generic' ? this._generic() : this._deviceMotion());
-        this.kind = k; this.active = true; this.lastArrival = performance.now();
-        return k;
-      } catch (e) { errs.push(toAppError(e)); }
+      try { await (k === 'generic' ? this._generic() : this._deviceMotion()); }
+      catch (e) { errs.push(toAppError(e)); continue; }
+      if (gen !== this.gen) {             // stop() was called while this sensor was starting
+        const s = this._stop; this._stop = null;
+        if (s) { try { s(); } catch (_) {} }
+        throw E('cancelled');
+      }
+      this.kind = k; this.active = true; this.lastArrival = performance.now();
+      return k;
     }
+    if (gen !== this.gen) throw E('cancelled');
     // Report the most useful reason
     throw errs.find(e => e.code === 'permDenied') || errs.find(e => e.code === 'noData') || errs.find(e => e.code !== 'noSensor') || errs[0] || E('noSensor');
   },
   stop() {
+    this.gen++;
     if (this._stop) { try { this._stop(); } catch (_) {} }
     this._stop = null; this.active = false; this.kind = null;
   },
@@ -1116,6 +1140,7 @@ const hub = {
       if (r === 'denied') throw E('permDenied');
     }
     const fix = this._timeFix();
+    const sgn = IS_IOS ? -1 : 1;   // iOS WebKit reports accelerationIncludingGravity with the opposite sign
     return new Promise((resolve, reject) => {
       let settled = false;
       const h = e => {
@@ -1123,7 +1148,7 @@ const hub = {
         if (!a || a.x == null || a.y == null || a.z == null) return;
         const t = fix(e.timeStamp);
         if (!settled) { settled = true; clearTimeout(timer); this._stop = () => window.removeEventListener('devicemotion', h); resolve(); }
-        this.emit(t, a.x, a.y, a.z);
+        this.emit(t, sgn * a.x, sgn * a.y, sgn * a.z);
       };
       const timer = setTimeout(() => { if (!settled) { settled = true; window.removeEventListener('devicemotion', h); reject(E('noData')); } }, 3000);
       window.addEventListener('devicemotion', h);
@@ -1134,11 +1159,6 @@ const hub = {
 /* =====================================================================
    Excitation: the vibration motor (Vibration API) or, on iPhone, haptic taps
    ===================================================================== */
-function excitationKind() {
-  if (typeof navigator.vibrate === 'function') return 'motor';
-  if (IS_IOS) return 'taps';
-  return null;
-}
 // iOS 18+ plays a short haptic when a <input type="checkbox" switch> is toggled; a label click toggles it.
 function hapticTap() {
   try {
@@ -1158,7 +1178,7 @@ function hapticTap() {
 const exciter = {
   timer: null,
   start(durMs) {
-    const kind = excitationKind();
+    const kind = EXC;
     if (kind === 'motor') { try { return navigator.vibrate(durMs) !== false; } catch (_) { return false; } }
     if (kind === 'taps') {
       this.stop();
@@ -1182,9 +1202,8 @@ const exciter = {
 
 function capabilityBlocker() {
   if (!window.isSecureContext) return E('insecure');
-  const ek = excitationKind();
-  if (!ek) return E('vibUnsupported');
-  if (ek === 'taps' && IOS_MAJOR && IOS_MAJOR < 18) return E('iosTooOld', { v: IOS_MAJOR });
+  if (!EXC) return E('vibUnsupported');
+  if (EXC === 'taps' && IOS_MAJOR && IOS_MAJOR < 18) return E('iosTooOld', { v: IOS_MAJOR });
   if (!('Accelerometer' in window) && !('DeviceMotionEvent' in window)) return E('noSensor');
   return null;
 }
@@ -1258,7 +1277,7 @@ function waitForStill(signal) {
    Measurement session (shared by Measure and Calibrate)
    ===================================================================== */
 async function startSession(area) {
-  if (busy) return;
+  if (busy || vibTesting) return;
   errors[area] = null;
   if (area === 'cal') calNote = null;
   renderMessages();
@@ -1281,6 +1300,7 @@ async function startSession(area) {
   try {
     setStatus(area, 'stSensor');
     const kind = await hub.start(settings.source);
+    if (ctrl.signal.aborted) throw abortErr(ctrl.signal);   // cancelled while the sensor was starting
     acquireWakeLock();
     busy.phase = 'countdown';
     for (let s = settings.delay; s > 0; s--) {
@@ -1337,7 +1357,7 @@ function cancelSession() {
 function summarizeRuns(runs, still, kind) {
   const warnings = [];
   const used = runs.filter(r => r.rms >= Math.max(CFG.vibAbsMin, CFG.vibRatioMin * r.base));
-  if (!used.length) throw E(excitationKind() === 'taps' ? 'noTaps' : 'noVibration');
+  if (!used.length) throw E(EXC === 'taps' ? 'noTaps' : 'noVibration');
   if (used.length < runs.length) warnings.push({ k: 'wWeakVib', v: { k: runs.length - used.length } });
   const amps = used.map(r => r.rms);
   const m = mean(amps), s = sd(amps), cv = m > 0 ? s / m : 0;
@@ -1364,6 +1384,7 @@ function finishMeasure(res) {
     out.runW = res.used.map(r => M.inv(r.rms, fit.p));
     if (out.est.outOfRange) out.warnings.unshift({ k: 'wOutOfRange', v: { range: `${fmtW(fit.wMin)}–${fmtW(fit.wMax)}` } });
     const cm = calMeta();
+    if (cm.exc && cm.exc !== EXC) out.warnings.push({ k: 'wExc', v: { a: '@exc_' + cm.exc, b: '@exc_' + EXC } });
     if (cm.orient && res.orient && cm.orient !== res.orient) out.warnings.push({ k: 'wOrient', v: { a: '@orient_' + cm.orient, b: '@orient_' + res.orient } });
     if (cm.fs > 0 && Math.abs(res.fs - cm.fs) / cm.fs > 0.2) out.warnings.push({ k: 'wRate', v: { now: res.fs.toFixed(0), cal: cm.fs.toFixed(0) } });
     if (cm.dur && cm.dur !== settings.duration) out.warnings.push({ k: 'wDur', v: { now: settings.duration / 1000, cal: cm.dur / 1000 } });
@@ -1379,7 +1400,7 @@ function finishCal(res, weight) {
   const pt = {
     w: weight, mean: res.mean, amps: res.amps.map(a => +a.toPrecision(6)), sd: res.sd,
     fs: +res.fs.toFixed(2), orient: res.orient, kind: res.kind, dur: settings.duration,
-    freq: res.freq != null ? +res.freq.toFixed(2) : null, t: Date.now(),
+    freq: res.freq != null ? +res.freq.toFixed(2) : null, t: Date.now(), exc: EXC,
   };
   cal.points = cal.points.filter(p => !sameW(p.w, weight));
   cal.points.push(pt);
@@ -1400,8 +1421,13 @@ function refit() { currentFit = fitCalibration(cal.points); }
    ===================================================================== */
 let wakeLock = null;
 async function acquireWakeLock() {
-  try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } }
-  catch (_) { wakeLock = null; }
+  if (!('wakeLock' in navigator) || wakeLock) return;
+  try {
+    const lock = await navigator.wakeLock.request('screen');
+    if (!busy) { lock.release().catch(() => {}); return; }   // the session ended while we were waiting
+    wakeLock = lock;
+    lock.addEventListener('release', () => { if (wakeLock === lock) wakeLock = null; });
+  } catch (_) { /* not supported or not allowed */ }
 }
 function releaseWakeLock() { try { if (wakeLock) wakeLock.release(); } catch (_) {} wakeLock = null; }
 
@@ -1440,14 +1466,14 @@ async function startDiag() {
   errors.diag = null; renderMessages();
   const blocker = !window.isSecureContext ? E('insecure') : null;
   if (blocker) { errors.diag = blocker; renderMessages(); return; }
-  diag = { kind: null, starting: true, times: [], last: null, hp: makeLiveHP(CFG.hpCutoffHz), buf: [], sum: 0, noise: 0, vibBusy: false };
+  const d = diag = { kind: null, starting: true, times: [], last: null, hp: makeLiveHP(CFG.hpCutoffHz), buf: [], sum: 0, noise: 0 };
   renderDiag();
   try {
     const kind = await hub.start(settings.source);
-    if (!diag) { if (!busy) hub.stop(); return; }
-    diag.kind = kind; diag.starting = false;
-    diag.onS = (t, x, y, z) => {
-      const d = diag; if (!d) return;
+    if (diag !== d) return;   // stopped (or restarted) while the sensor was starting
+    d.kind = kind; d.starting = false;
+    d.onS = (t, x, y, z) => {
+      if (diag !== d) return;
       d.times.push(t); while (d.times.length && d.times[0] < t - 1000) d.times.shift();
       d.last = [x, y, z];
       const m = d.hp(t, x, y, z), e = m * m;
@@ -1455,12 +1481,15 @@ async function startDiag() {
       while (d.buf.length > 1 && d.buf[0][0] < t - 500) d.sum -= d.buf.shift()[1];
       d.noise = Math.sqrt(Math.max(0, d.sum) / d.buf.length);
     };
-    hub.on(diag.onS);
-    diag.timer = setInterval(renderDiag, 200);
+    hub.on(d.onS);
+    d.timer = setInterval(renderDiag, 200);
   } catch (e) {
-    errors.diag = toAppError(e);
-    diag = null;
-    renderMessages();
+    if (diag === d) {
+      diag = null;
+      const err = toAppError(e);
+      if (err.code !== 'cancelled') errors.diag = err;
+      renderMessages();
+    }
   }
   renderDiag();
 }
@@ -1473,25 +1502,26 @@ function stopDiag() {
   renderDiag();
 }
 async function testVibration() {
-  if (busy || (diag && diag.vibBusy)) return;
+  if (busy || vibTesting) return;
   errors.diag = null; renderMessages();
   const blocker = capabilityBlocker();
   if (blocker) { errors.diag = blocker; renderMessages(); return; }
-  if (excitationKind() === 'taps') hapticTap();   // immediate tap you can feel: confirms iOS haptics work at all
+  if (EXC === 'taps') hapticTap();   // immediate tap you can feel: confirms iOS haptics work at all
+  vibTesting = true; diagVib = null; setBusyUI();
   const autoStarted = !diag;
-  if (!diag) { await startDiag(); if (!diag || diag.starting) return; }
-  diag.vibBusy = true; diagVib = null; renderDiag();
   try {
+    if (!diag) await startDiag();
+    if (!diag || diag.starting) return;
     await wait(400);
     const rec = await record({ baselineMs: 600, durMs: 1000, postMs: 300 });
     const r = analyzeRun(rec);
-    diagVib = { rms: r.rms, base: r.base, ok: r.rms >= Math.max(CFG.vibAbsMin, CFG.vibRatioMin * r.base), fs: r.fs, taps: excitationKind() === 'taps' };
+    diagVib = { rms: r.rms, base: r.base, ok: r.rms >= Math.max(CFG.vibAbsMin, CFG.vibRatioMin * r.base), fs: r.fs, taps: EXC === 'taps' };
   } catch (e) {
     errors.diag = toAppError(e);
   } finally {
-    if (diag) diag.vibBusy = false;
+    vibTesting = false;
     if (autoStarted) stopDiag();
-    renderDiag(); renderMessages();
+    setBusyUI(); renderMessages();
   }
 }
 
@@ -1516,13 +1546,11 @@ function kvRows(dl, rows) {
 
 function computeBanners() {
   banners = [];
-  if (!window.isSecureContext) banners.push({ kind: 'err', k: 'insecure' });
-  const ek = excitationKind();
-  if (!ek) banners.push({ kind: 'err', k: 'vibUnsupported' });
-  else if (ek === 'taps') banners.push(IOS_MAJOR && IOS_MAJOR < 18 ? { kind: 'err', k: 'iosTooOld', v: { v: IOS_MAJOR } } : { kind: 'info', k: 'bIOS' });
-  if (!('Accelerometer' in window) && !('DeviceMotionEvent' in window)) banners.push({ kind: 'err', k: 'noSensor' });
+  const blocker = capabilityBlocker();
+  if (blocker) banners.push({ kind: 'err', k: blocker.code, v: blocker.vars });
+  else if (EXC === 'taps') banners.push({ kind: 'info', k: 'bIOS' });
   if (permState === 'denied') banners.push({ kind: 'err', k: 'permDenied' });
-  if (!banners.length && !IS_IOS && !/Android/i.test(UA)) banners.push({ kind: 'info', k: 'bNotAndroid' });
+  if (!banners.length && !/Android/i.test(UA)) banners.push({ kind: 'info', k: 'bNotAndroid' });
 }
 function renderBanners() { $('banners').replaceChildren(...banners.map(b => alertEl(b.kind, t(errKey(b.k), b.v)))); }
 
@@ -1560,12 +1588,14 @@ function setBusyUI() {
   const mb = $('measureBtn'), cb = $('calMeasureBtn');
   mb.textContent = area === 'measure' ? t('cancelBtn') : t('measureBtn');
   mb.classList.toggle('stop', area === 'measure'); mb.classList.toggle('primary', area !== 'measure');
-  mb.disabled = !!busy && area !== 'measure';
+  mb.disabled = (!!busy && area !== 'measure') || vibTesting;
   cb.textContent = area === 'cal' ? t('cancelBtn') : t('calMeasureBtn');
   cb.classList.toggle('stop', area === 'cal'); cb.classList.toggle('primary', area !== 'cal');
-  cb.disabled = !!busy && area !== 'cal';
-  for (const id of ['calWeight', 'calZero', 'resetBtn', 'importBtn', 'exportBtn', 'diagBtn', 'diagVibBtn', 'setSound']) $(id).disabled = !!busy;
-  document.querySelectorAll('.seg button, .caltable .icon-btn').forEach(b => { b.disabled = !!busy; });
+  cb.disabled = (!!busy && area !== 'cal') || vibTesting;
+  const locked = !!busy || vibTesting;
+  for (const id of ['calWeight', 'calZero', 'resetBtn', 'importBtn', 'exportBtn', 'setSound']) $(id).disabled = locked;
+  document.querySelectorAll('.seg button').forEach(b => { b.disabled = locked || b.dataset.na === '1'; });
+  document.querySelectorAll('.caltable .icon-btn').forEach(b => { b.disabled = locked; });
   renderStatus('measure'); renderStatus('cal');
   renderDiag();
 }
@@ -1667,7 +1697,9 @@ function renderSettings() {
     box.replaceChildren(...list.map(([v, label]) => {
       const b = document.createElement('button');
       b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(settings[key] === v));
-      b.textContent = label; b.disabled = !!busy;
+      b.textContent = label;
+      if (key === 'source' && !sourceAvailable(v)) b.dataset.na = '1';
+      b.disabled = !!busy || vibTesting || b.dataset.na === '1';
       b.addEventListener('click', () => {
         if (busy || settings[key] === v) return;
         settings[key] = v; saveSettings(); renderSettings();
@@ -1684,15 +1716,15 @@ function renderDiag() {
   const apis = [('Accelerometer' in window) && 'Accelerometer', ('DeviceMotionEvent' in window) && 'DeviceMotion'].filter(Boolean).join(', ') || t('none');
   kvRows($('diagCaps'), [
     [t('dSecure'), window.isSecureContext ? yes : no, window.isSecureContext ? 'good' : 'bad'],
-    [t('dVibApi'), excitationKind() ? t('exc_' + excitationKind()) : t('none'), excitationKind() === 'motor' ? 'good' : excitationKind() ? '' : 'bad'],
+    [t('dVibApi'), EXC ? t('exc_' + EXC) : t('none'), EXC === 'motor' ? 'good' : EXC ? '' : 'bad'],
     [t('dSensorApi'), apis],
     [t('dWakeLock'), 'wakeLock' in navigator ? yes : no],
     [t('dPerm'), t('perm_' + permState), permState === 'denied' ? 'bad' : ''],
   ]);
   const btn = $('diagBtn');
   btn.textContent = diag ? t('diagStop') : t('diagStart');
-  $('diagVibBtn').disabled = !!busy || !!(diag && (diag.vibBusy || diag.starting));
-  btn.disabled = !!busy;
+  $('diagVibBtn').disabled = !!busy || vibTesting || !!(diag && diag.starting);
+  btn.disabled = !!busy || vibTesting;
   const rows = [];
   if (diag && !diag.starting) {
     const d = diag, l = d.last;
@@ -1706,7 +1738,7 @@ function renderDiag() {
       rows.push([t('dOrient'), t(zUp(l[2]) ? 'orient_up' : 'orient_down')]);
     }
   }
-  if (diag && diag.vibBusy) rows.push([t('dVibRes'), t('testing')]);
+  if (vibTesting) rows.push([t('dVibRes'), t('testing')]);
   else if (diagVib) rows.push([t('dVibRes'), t(diagVib.ok ? 'vibOk' : diagVib.taps ? 'vibBadTaps' : 'vibBad', { a: fmtA(diagVib.rms), b: fmtA(diagVib.base), r: (diagVib.rms / Math.max(diagVib.base, 1e-4)).toFixed(0) }), diagVib.ok ? 'good' : 'bad']);
   kvRows($('diagLive'), rows);
 }

@@ -1,0 +1,1889 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1014">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Estimate the weight of small objects with your phone's vibration motor and accelerometer.">
+<title>VibroScale</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d1014'/%3E%3Crect x='11' y='6' width='10' height='20' rx='2.5' fill='none' stroke='%232fd1b0' stroke-width='2'/%3E%3Cpath d='M7 12v8M4 14v4M25 12v8M28 14v4' stroke='%232fd1b0' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E">
+<!--
+  VibroScale — single-file, dependency-free, offline web app.
+  Estimates the weight of small objects from how much a load on the phone
+  damps its own vibration motor, as seen by the accelerometer.
+  Target: Chrome on Android. Needs a secure context (https://, localhost or file://).
+-->
+<style>
+:root{
+  --bg:#0d1014; --surface:#151a21; --surface-2:#1c222b; --well:#0f1318;
+  --line:#29303b; --line-2:#363e4b;
+  --text:#e9edf3; --muted:#98a2b3; --faint:#5b6574;
+  --accent:#2fd1b0; --accent-ink:#03241d; --accent-soft:rgba(47,209,176,.13);
+  --warn:#f3b33d; --warn-soft:rgba(243,179,61,.12);
+  --err:#ff6b6b; --err-soft:rgba(255,107,107,.12);
+  --info:#8ab4ff; --info-soft:rgba(138,180,255,.12);
+  --radius:16px;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:17px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans","Noto Sans Arabic",Tahoma,sans-serif;
+  min-height:100vh;min-height:100dvh;padding-bottom:calc(90px + env(safe-area-inset-bottom));
+  -webkit-tap-highlight-color:transparent;overflow-x:hidden}
+h2{font-size:19px;margin:0 0 8px;line-height:1.3}
+h3{font-size:16px;margin:14px 0 6px}
+p{margin:0 0 10px}
+.muted{color:var(--muted)}
+.small{font-size:14px}
+button,input{font:inherit;color:inherit}
+[hidden]{display:none!important}
+
+/* header */
+header.top{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top));
+  background:rgba(13,16,20,.94);border-bottom:1px solid var(--line);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:750;font-size:19px;min-width:0}
+.brand svg{width:30px;height:30px;flex:none;color:var(--accent)}
+.brand span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{flex:none;min-height:44px;min-width:84px;padding:0 16px;border-radius:999px;border:1px solid var(--line-2);
+  background:var(--surface-2);font-weight:650;font-size:16px;cursor:pointer;touch-action:manipulation}
+
+main{max-width:560px;margin:0 auto;padding:14px 12px}
+.banners{max-width:560px;margin:0 auto;padding:0 12px}
+.banners:not(:empty){padding-top:10px}
+.tab{display:none}
+.tab.active{display:block}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin:0 0 14px}
+
+/* buttons */
+.btn{appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:56px;padding:0 18px;
+  border-radius:14px;border:1px solid var(--line-2);background:var(--surface-2);font-weight:650;font-size:17px;
+  cursor:pointer;touch-action:manipulation;-webkit-user-select:none;user-select:none;
+  transition:transform .08s ease,background-color .15s ease}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.42;cursor:not-allowed;transform:none}
+.btn.primary{background:var(--accent);border-color:transparent;color:var(--accent-ink)}
+.btn.huge{width:100%;min-height:88px;font-size:26px;border-radius:22px;font-weight:800}
+.btn.wide{width:100%}
+.btn.stop{background:var(--err);border-color:transparent;color:#2a0606}
+.btn.danger{background:transparent;color:var(--err);border-color:rgba(255,107,107,.45)}
+.btn:focus-visible,.pill:focus-visible,.seg button:focus-visible,nav.tabs button:focus-visible,
+.chip:focus-visible,.inp:focus-visible,.icon-btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.row{display:flex;gap:10px;align-items:stretch}
+.row>*{min-width:0}
+.row.wrap{flex-wrap:wrap}
+.grow{flex:1 1 0}
+.mt{margin-top:12px}
+
+/* calibration chip */
+.chip{display:flex;width:100%;align-items:center;gap:10px;text-align:start;min-height:52px;padding:10px 14px;margin:0 0 12px;
+  border-radius:14px;border:1px solid var(--line);background:var(--surface);font-size:15px;font-weight:600;cursor:pointer;touch-action:manipulation}
+.chip.ok{border-color:rgba(47,209,176,.35);color:#bff3e6;background:var(--accent-soft)}
+.chip.warn{border-color:rgba(243,179,61,.4);color:#ffdf9e;background:var(--warn-soft)}
+.chip::after{content:"\203A";margin-inline-start:auto;font-size:24px;line-height:1;opacity:.7}
+[dir=rtl] .chip::after{content:"\2039"}
+
+/* graph */
+.graph{display:block;width:100%;height:190px;border-radius:12px;background:var(--well)}
+.graph.small{height:150px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px;font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{display:inline-block;width:16px;height:4px;border-radius:2px;background:var(--accent)}
+.sw.raw{background:rgba(233,237,243,.35);height:2px}
+.sw.win{background:rgba(47,209,176,.3);height:10px;width:14px}
+.statusline{min-height:26px;margin:10px 2px 6px;font-size:16px;color:var(--muted)}
+.statusline.live{color:var(--text);font-weight:600}
+.progress{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;margin:0 0 12px}
+.progress .bar{height:100%;width:0;background:var(--accent);transition:width .12s linear}
+
+/* result */
+.result{text-align:center;padding:18px 14px}
+.res-label{color:var(--muted);font-size:15px;font-weight:650}
+.res-row{display:flex;align-items:baseline;justify-content:center;gap:8px;margin:6px 0 2px;flex-wrap:wrap}
+.big{font-size:68px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-1px}
+.unit{font-size:28px;color:var(--muted);font-weight:700}
+.pm{font-size:21px;font-weight:700}
+.pm-note{font-size:13px;color:var(--muted);margin-top:2px}
+.details{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:14px 0 0;text-align:start;font-size:14.5px}
+.details dt{color:var(--muted)}
+.details dd{margin:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.footnote{font-size:12.5px;color:var(--muted);text-align:start;margin:10px 0 0}
+
+/* alerts */
+.alert{display:flex;gap:10px;align-items:flex-start;text-align:start;border-radius:12px;padding:11px 13px;margin:10px 0 0;
+  font-size:15px;line-height:1.45;border:1px solid}
+.alert::before{content:"!";flex:none;display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;
+  font-weight:800;font-size:14px;margin-top:1px}
+.alert.warn{background:var(--warn-soft);border-color:rgba(243,179,61,.4);color:#ffdf9e}
+.alert.warn::before{background:var(--warn);color:#2b1d00}
+.alert.err{background:var(--err-soft);border-color:rgba(255,107,107,.45);color:#ffc9c9}
+.alert.err::before{content:"\00D7";background:var(--err);color:#2a0606}
+.alert.info{background:var(--info-soft);border-color:rgba(138,180,255,.4);color:#d3e2ff}
+.alert.info::before{content:"i";background:var(--info);color:#0b1a33}
+.alert.ok{background:var(--accent-soft);border-color:rgba(47,209,176,.4);color:#c4f5e8}
+.alert.ok::before{content:"\2713";background:var(--accent);color:var(--accent-ink)}
+.banners .alert{margin:0 0 8px}
+
+/* forms */
+.lbl{display:block;font-weight:650;margin:12px 0 6px}
+.inp{width:100%;min-height:58px;padding:0 16px;border-radius:14px;border:1px solid var(--line-2);background:var(--well);
+  font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+.inp::placeholder{color:var(--faint)}
+.inp:disabled{opacity:.5}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px;background:var(--well);border:1px solid var(--line);
+  border-radius:14px;padding:5px}
+.seg.stack{grid-auto-flow:row}
+.seg button{min-height:48px;border-radius:10px;border:0;background:transparent;color:var(--muted);font-weight:650;font-size:15.5px;
+  cursor:pointer;touch-action:manipulation;padding:0 8px}
+.seg button[aria-checked="true"]{background:var(--surface-2);color:var(--text);box-shadow:inset 0 0 0 1px var(--line-2)}
+.seg button:disabled{opacity:.5}
+.setting{margin:0 0 16px}
+.setting:last-child{margin-bottom:0}
+.setting .lbl{margin-top:0}
+.hint{font-size:13.5px;color:var(--muted);margin:6px 2px 0}
+.switch-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:56px}
+.switch{position:relative;width:58px;height:34px;flex:none}
+.switch input{position:absolute;inset:0;width:100%;height:100%;opacity:0;margin:0;cursor:pointer;z-index:1}
+.switch span{position:absolute;inset:0;border-radius:999px;background:var(--line-2);transition:background .15s}
+.switch span::after{content:"";position:absolute;top:4px;left:4px;width:26px;height:26px;border-radius:50%;background:#fff;transition:transform .15s}
+.switch input:checked+span{background:var(--accent)}
+.switch input:checked+span::after{transform:translateX(24px)}
+[dir=rtl] .switch span::after{left:auto;right:4px}
+[dir=rtl] .switch input:checked+span::after{transform:translateX(-24px)}
+.switch input:focus-visible+span{outline:3px solid var(--accent);outline-offset:2px}
+
+/* calibration table */
+.caltable{width:100%;border-collapse:collapse;font-size:15px;font-variant-numeric:tabular-nums}
+.caltable th{font-size:12.5px;color:var(--muted);font-weight:650;text-align:start;padding:6px 4px;border-bottom:1px solid var(--line)}
+.caltable td{padding:3px 4px;border-bottom:1px solid var(--line);text-align:start;white-space:nowrap}
+.caltable tr:last-child td{border-bottom:0}
+.caltable td.hi{color:var(--warn);font-weight:700}
+.caltable td.act{width:48px;text-align:end}
+.icon-btn{width:44px;height:44px;border-radius:12px;border:1px solid var(--line-2);background:transparent;color:var(--muted);
+  font-size:22px;line-height:1;cursor:pointer;display:inline-grid;place-items:center;touch-action:manipulation}
+.icon-btn:disabled{opacity:.4}
+.fit-sum{font-size:15px;margin-top:10px}
+.fit-sum p{margin:0 0 6px}
+code.eq{direction:ltr;unicode-bidi:isolate;display:inline-block;background:var(--well);border:1px solid var(--line);border-radius:8px;
+  padding:4px 8px;font-size:14px;font-family:ui-monospace,"Roboto Mono",monospace;max-width:100%;overflow-wrap:anywhere}
+.fit-sum .best{color:var(--accent);font-weight:700}
+
+/* key/value lists */
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:15px;margin:10px 0 0}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;text-align:end;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.kv dd.bad{color:var(--err);font-weight:700}
+.kv dd.good{color:var(--accent);font-weight:700}
+
+.help ol,.help ul{padding-inline-start:22px;margin:0 0 8px}
+.help li{margin:0 0 8px}
+.help p:last-child{margin-bottom:0}
+.disclaimer{font-size:13.5px;color:var(--muted);line-height:1.5;margin:4px 0 14px;padding:12px 14px;border:1px dashed var(--line-2);border-radius:12px}
+
+/* bottom navigation */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:10;display:grid;grid-template-columns:repeat(3,1fr);
+  background:rgba(17,21,27,.97);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+nav.tabs button{min-height:70px;border:0;background:none;color:var(--muted);font-size:13px;font-weight:650;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:3px;cursor:pointer;touch-action:manipulation;padding:6px 4px;line-height:1.2}
+nav.tabs button svg{width:26px;height:26px}
+nav.tabs button[aria-selected="true"]{color:var(--accent)}
+nav.tabs button[aria-selected="true"]::before{content:"";position:absolute;top:0;width:44px;height:3px;border-radius:0 0 3px 3px;background:var(--accent)}
+nav.tabs button{position:relative}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (min-width:600px){.big{font-size:80px}}
+</style>
+</head>
+<body>
+<noscript><p style="padding:16px">This app needs JavaScript. / يحتاج هذا التطبيق إلى جافاسكربت.</p></noscript>
+
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+      <rect x="11" y="5" width="10" height="22" rx="2.5"/><path d="M7 12v8M3.5 14v4M25 12v8M28.5 14v4"/>
+    </svg>
+    <span data-i18n="appName">VibroScale</span>
+  </div>
+  <button id="langBtn" class="pill" type="button"></button>
+</header>
+
+<div id="banners" class="banners" aria-live="polite"></div>
+
+<main>
+  <!-- ============ MEASURE ============ -->
+  <section id="tab-measure" class="tab active" role="tabpanel" aria-labelledby="nav-measure">
+    <button id="calChip" class="chip" type="button"></button>
+    <div class="card">
+      <canvas id="measCanvas" class="graph" aria-hidden="true"></canvas>
+      <div class="legend">
+        <span><i class="sw raw"></i><b data-i18n="lgRaw" style="font-weight:500"></b></span>
+        <span><i class="sw"></i><b data-i18n="lgEnv" style="font-weight:500"></b></span>
+        <span><i class="sw win"></i><b data-i18n="lgWin" style="font-weight:500"></b></span>
+      </div>
+    </div>
+    <div id="measStatus" class="statusline" role="status" aria-live="polite"></div>
+    <div class="progress" aria-hidden="true"><div id="measBar" class="bar"></div></div>
+    <button id="measureBtn" class="btn primary huge" type="button"></button>
+    <div id="measMsg"></div>
+    <div id="resultCard" class="card result mt" aria-live="polite" hidden>
+      <div id="resLabel" class="res-label"></div>
+      <div class="res-row"><span id="resValue" class="big" dir="ltr"></span><span id="resUnit" class="unit"></span></div>
+      <div id="resPm" class="pm"></div>
+      <div id="resPmNote" class="pm-note"></div>
+      <div id="resWarnings"></div>
+      <dl id="resDetails" class="details"></dl>
+      <p id="resFoot" class="footnote" hidden></p>
+    </div>
+    <p class="disclaimer mt" data-i18n="disclaimer"></p>
+  </section>
+
+  <!-- ============ CALIBRATE ============ -->
+  <section id="tab-cal" class="tab" role="tabpanel" aria-labelledby="nav-cal">
+    <div class="card">
+      <h2 data-i18n="calTitle"></h2>
+      <p class="muted small" data-i18n="calIntro"></p>
+      <label for="calWeight" class="lbl" data-i18n="calWeightLabel"></label>
+      <div class="row">
+        <input id="calWeight" class="inp grow" type="text" inputmode="decimal" autocomplete="off" enterkeyhint="go" placeholder="0" dir="ltr">
+        <button id="calZero" class="btn" type="button" data-i18n="calZero"></button>
+      </div>
+      <button id="calMeasureBtn" class="btn primary wide mt" type="button"></button>
+      <canvas id="calCanvas" class="graph small mt" aria-hidden="true"></canvas>
+      <div id="calStatus" class="statusline" role="status" aria-live="polite"></div>
+      <div class="progress" aria-hidden="true"><div id="calBar" class="bar"></div></div>
+      <div id="calMsg"></div>
+    </div>
+    <div class="card">
+      <h2 data-i18n="calPoints"></h2>
+      <div id="calTable"></div>
+    </div>
+    <div class="card">
+      <h2 data-i18n="fitTitle"></h2>
+      <canvas id="fitCanvas" class="graph" aria-hidden="true"></canvas>
+      <div id="fitSummary" class="fit-sum"></div>
+    </div>
+    <div class="row">
+      <button id="exportBtn" class="btn grow" type="button" data-i18n="exportBtn"></button>
+      <button id="importBtn" class="btn grow" type="button" data-i18n="importBtn"></button>
+      <input id="importFile" type="file" accept="application/json,.json" hidden>
+    </div>
+    <button id="resetBtn" class="btn danger wide mt" type="button" data-i18n="resetBtn"></button>
+    <div class="card help mt">
+      <h2 data-i18n="calHelpTitle"></h2>
+      <div data-i18n-html="calHelpHtml"></div>
+    </div>
+  </section>
+
+  <!-- ============ HELP & SETTINGS ============ -->
+  <section id="tab-help" class="tab" role="tabpanel" aria-labelledby="nav-help">
+    <div class="card help">
+      <h2 data-i18n="helpTitle"></h2>
+      <div data-i18n-html="helpHtml"></div>
+    </div>
+    <div class="card">
+      <h2 data-i18n="setTitle"></h2>
+      <div class="setting">
+        <div class="lbl" id="lblDelay" data-i18n="setDelay"></div>
+        <div class="seg" role="radiogroup" aria-labelledby="lblDelay" data-setting="delay"></div>
+        <p class="hint" data-i18n="setDelayHint"></p>
+      </div>
+      <div class="setting">
+        <div class="lbl" id="lblDur" data-i18n="setDuration"></div>
+        <div class="seg" role="radiogroup" aria-labelledby="lblDur" data-setting="duration"></div>
+      </div>
+      <div class="setting">
+        <div class="lbl" id="lblSrc" data-i18n="setSource"></div>
+        <div class="seg stack" role="radiogroup" aria-labelledby="lblSrc" data-setting="source"></div>
+        <p class="hint" data-i18n="setHint"></p>
+      </div>
+      <div class="setting switch-row">
+        <label for="setSound" data-i18n="setSound"></label>
+        <span class="switch"><input id="setSound" type="checkbox"><span></span></span>
+      </div>
+    </div>
+    <div class="card">
+      <h2 data-i18n="diagTitle"></h2>
+      <p class="muted small" data-i18n="diagIntro"></p>
+      <dl id="diagCaps" class="kv"></dl>
+      <div class="row mt">
+        <button id="diagBtn" class="btn grow" type="button"></button>
+        <button id="diagVibBtn" class="btn grow" type="button" data-i18n="diagVib"></button>
+      </div>
+      <dl id="diagLive" class="kv"></dl>
+      <div id="diagMsg"></div>
+    </div>
+    <div class="card help">
+      <h2 data-i18n="howTitle"></h2>
+      <div data-i18n-html="howHtml"></div>
+    </div>
+    <p class="disclaimer" data-i18n="disclaimer"></p>
+  </section>
+</main>
+
+<nav class="tabs" role="tablist">
+  <button id="nav-measure" role="tab" type="button" data-tab="measure" aria-selected="true" aria-controls="tab-measure">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16M8 20h8M5 7h14M12 4l-7 3M12 4l7 3M5 7l-3 6a3 3 0 0 0 6 0zM19 7l-3 6a3 3 0 0 0 6 0z"/></svg>
+    <span data-i18n="tabMeasure"></span>
+  </button>
+  <button id="nav-cal" role="tab" type="button" data-tab="cal" aria-selected="false" aria-controls="tab-cal">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg>
+    <span data-i18n="tabCal"></span>
+  </button>
+  <button id="nav-help" role="tab" type="button" data-tab="help" aria-selected="false" aria-controls="tab-help">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.4c-.7.3-1 .9-1 1.6v.4"/><circle cx="12" cy="17" r=".6" fill="currentColor"/></svg>
+    <span data-i18n="tabHelp"></span>
+  </button>
+</nav>
+
+<script>
+(() => {
+'use strict';
+
+/* =====================================================================
+   Configuration
+   ===================================================================== */
+const CFG = {
+  repeats: 3,            // runs per measurement / per calibration point
+  baselineMs: 700,       // record this long before the motor starts (noise floor, gravity)
+  trimMs: 300,           // ignore first/last 0.3 s of the vibration (spin-up / spin-down)
+  postMs: 450,           // keep recording after the motor stops (detects shifting)
+  pauseMs: 900,          // settle time between runs
+  hpCutoffHz: 1.0,       // high-pass cut-off; low on purpose (aliased vibration can land at a few Hz)
+  stillThresh: 0.12,     // m/s² RMS of filtered |a| that counts as "still"
+  stillHoldMs: 600,
+  stillTimeoutMs: 8000,
+  vibRatioMin: 2.0,      // vibration RMS must exceed background noise by this factor…
+  vibAbsMin: 0.02,       // …and this absolute level (m/s²)
+  cvWarn: 0.08,          // warn when run-to-run spread exceeds 8 %
+  flatMin: 0.97,         // |gz|/|g| below this → not lying flat (~14°)
+  shiftMax: 0.3,         // m/s² change of the gravity vector before/after → phone moved
+  requestHz: 200,        // ask for the highest rate; browsers cap it (Chrome often at 60 Hz)
+  minWindowSamples: 12,
+  fewWindowSamples: 50,
+};
+const KEYS = { settings: 'vibroscale.settings.v1', cal: 'vibroscale.calibration.v1', lang: 'vibroscale.lang' };
+const DEFAULT_SETTINGS = { duration: 2000, delay: 5, source: 'auto', sound: true };
+const RUN_COLORS = ['#2fd1b0', '#8ab4ff', '#f3b33d'];
+
+/* =====================================================================
+   Translations
+   ===================================================================== */
+const I18N = {
+en: {
+  appName: 'VibroScale',
+  tabMeasure: 'Measure', tabCal: 'Calibrate', tabHelp: 'Help & settings',
+  langBtn: 'العربية',
+  measureBtn: 'Measure', cancelBtn: 'Cancel',
+  lgRaw: 'filtered |a|', lgEnv: 'amplitude (RMS)', lgWin: 'analysed part',
+  graphEmpty: 'The vibration trace appears here',
+  runLabel: 'Run {i}/{n}',
+  disclaimer: 'Estimate only. Typical accuracy is about ±5–15% after careful calibration, and depends on the surface, the phone case and where the object sits. Not for trade, legal, medical or safety use.',
+  unitG: 'g', unitAcc: 'm/s²', unitHz: 'Hz',
+  orient_up: 'screen up', orient_down: 'screen down',
+  m_linear: 'linear', m_inverse: 'inverse (1/x)', m_exponential: 'exponential',
+  src_auto: 'Auto (recommended)', src_generic: 'Accelerometer (Generic Sensor API)', src_devicemotion: 'DeviceMotion event',
+  srcShort_generic: 'Accelerometer API', srcShort_devicemotion: 'DeviceMotion',
+  calNone: 'Not calibrated — tap to calibrate. Until then only the raw vibration amplitude is shown.',
+  calOk: 'Calibrated · {n} weights · {m} · R² {r2}',
+  calNeedMore: 'Calibration incomplete: {n} of at least 3 weights',
+  stIdle: 'Tap Measure, then put the object on the phone during the countdown and let go.',
+  stIdleCal: 'Enter the known weight, tap “Measure 3×”, then put the weight on the phone during the countdown.',
+  stSensor: 'Starting motion sensor…',
+  stCountdown: 'Put the object on the phone and let go… {s}',
+  stStill: 'Waiting for the phone to be still…',
+  stRun: 'Run {i} of {n}: vibrating — don’t touch',
+  stPause: 'Run {i} of {n} done…',
+  stDone: 'Done.', stCancelled: 'Cancelled.',
+  resTitle: 'Estimated weight', resAmpOnly: 'Vibration amplitude (not calibrated)',
+  resPm: '{e} g ({p})', resPmAmp: 'run spread {e} m/s²',
+  resPmNote: '≈95% range, from calibration residuals and run-to-run spread',
+  resRuns: 'Each run', resAmp: 'Mean amplitude', resSpread: 'Run-to-run spread', resNoise: 'Background noise',
+  resFreq: 'Dominant frequency', resSensor: 'Sensor',
+  aliasNote: '* Apparent (aliased) frequency: the sensor samples more slowly than the motor vibrates.',
+  wOutOfRange: 'Outside calibrated range ({range} g). The value is extrapolated and may be far off — add calibration points near this weight.',
+  wSpread: 'The runs disagree by {cv}%. Keep the table still and measure again.',
+  wNotStill: 'The phone was never completely still before the measurement started.',
+  wNotFlat: 'The phone does not seem to lie flat.',
+  wMoved: 'The phone or the object shifted during vibration. Use a firm, level, non-slippery surface.',
+  wWeakVib: '{k} run(s) showed no clear vibration and were ignored.',
+  wOrient: 'Phone orientation differs from calibration (calibrated {a}, now {b}).',
+  wRate: 'Sensor rate ({now} Hz) differs from calibration ({cal} Hz). Recalibrate if results look wrong.',
+  wDur: 'Vibration length ({now} s) differs from calibration ({cal} s).',
+  wNoCal: 'Not calibrated — showing the raw vibration amplitude only.',
+  wFewSamples: 'Only {n} sensor samples were analysed per run ({fs} Hz). A longer vibration (Settings) improves precision.',
+  noVibration: 'No vibration detected (or the object is too heavy). Check that vibration is on in Android Settings → Sound & vibration, and that Do Not Disturb and battery saver are off. The Sensor check on the Help tab can test this.',
+  noData: 'The motion sensor sends no data. In Chrome: ⋮ → Settings → Site settings → Motion sensors → Allow, then reload.',
+  permDenied: 'Motion sensor access is blocked for this site. Tap the icon next to the address bar → Permissions → Motion sensors → Allow, then reload.',
+  sensorErr: 'Could not start the accelerometer ({msg}).',
+  noSensor: 'This browser has no accelerometer API. Use Chrome on Android.',
+  vibUnsupported: 'This browser has no Vibration API (e.g. Safari on iPhone, or a desktop browser). Use Chrome on Android.',
+  vibBlocked: 'The browser blocked the vibration. Tap the page once and try again.',
+  insecure: 'Sensors need a secure page. Open the app via https:// (e.g. GitHub Pages), localhost, or as a local file.',
+  fewSamples: 'Too few sensor samples ({n}). The sensor rate is too low — try a longer vibration or the other sensor source in Settings.',
+  hidden: 'Stopped: the page was hidden or the screen turned off.',
+  sensorStopped: 'The sensor stopped sending data during the measurement.',
+  badWeight: 'Enter the known weight in grams (e.g. 0, 20, 50).',
+  bNotAndroid: 'Built for Chrome on Android. Other browsers and desktops may lack vibration or motion sensors.',
+  calTitle: 'Calibration',
+  calIntro: 'Measure several known weights, including 0 g (nothing on the phone). Each one is measured 3 times and averaged. Use the same table, phone case, orientation and object position you will use when measuring.',
+  calWeightLabel: 'Known weight (g)', calZero: '0 g (empty)', calMeasureBtn: 'Measure 3×',
+  calPoints: 'Calibration points',
+  calEmpty: 'No points yet. Start with 0 g (nothing on the phone).',
+  thWeight: 'Weight', thAmp: 'Amplitude', thSpread: 'Spread', thFit: 'Curve',
+  delPoint: 'Delete point', delConfirm: 'Delete the {w} g point?',
+  replaceConfirm: 'A point for {w} g already exists. Replace it?',
+  calAdded: 'Added {w} g: amplitude {a} m/s² (spread {cv}%).',
+  fitTitle: 'Calibration curve',
+  fitEmpty: 'The curve appears after adding points',
+  fitNeed: 'Add at least 3 different weights to fit a curve ({n} so far).',
+  fitFlat: 'The amplitude does not change with weight, so no curve can be fitted. Check the setup and that the phone vibrates.',
+  fitNoModel: 'No curve could be fitted. Re-measure the inconsistent points.',
+  fitBest: 'Best model: {m} — R² = {r2}',
+  fitEq: 'Equation (A in m/s², w in g):',
+  fitAll: 'All models (R²):',
+  fitErr: 'Typical error on the calibration points: ±{e} g',
+  fitIncreasing: 'Unusual: the amplitude increases with weight. Make sure the object sits firmly on the phone.',
+  fitMixed: 'The points were taken with different phone orientations (screen up/down). Use one orientation.',
+  fitFew: 'Tip: 5–6 points spread over your range give a more reliable curve.',
+  exportBtn: 'Export', importBtn: 'Import',
+  importOk: 'Calibration imported.', importBad: 'That is not a valid calibration file.',
+  importConfirm: 'Replace the current calibration with the imported file?',
+  resetBtn: 'Reset calibration', resetConfirm: 'Delete all calibration points? This cannot be undone.', resetDone: 'Calibration deleted.',
+  calHelpTitle: 'Calibration tips',
+  setTitle: 'Settings',
+  setDelay: 'Start delay', setDelayHint: 'Time to put the object down (or turn the phone over) after tapping. The app then waits until the phone is still.',
+  setDuration: 'Vibration length',
+  setSource: 'Sensor source', setHint: 'Keep these settings the same for calibrating and measuring.',
+  setSound: 'Beep when finished',
+  secS: '{s} s', delayOff: 'None',
+  diagTitle: 'Sensor check', diagIntro: 'Check that the accelerometer and the vibration motor work before calibrating.',
+  diagStart: 'Start sensor', diagStop: 'Stop sensor', diagVib: 'Test vibration',
+  dSecure: 'Secure page', dVibApi: 'Vibration API', dSensorApi: 'Sensor APIs', dWakeLock: 'Keep screen on', dPerm: 'Motion permission',
+  dSource: 'Source', dRate: 'Sample rate', dAccel: 'x / y / z', dGravity: '|a|', dNoise: 'Noise (RMS)', dOrient: 'Orientation', dVibRes: 'Vibration test',
+  yes: 'yes', no: 'no', none: 'none', testing: 'testing…',
+  perm_granted: 'allowed', perm_denied: 'blocked', perm_prompt: 'will ask', perm_unknown: 'unknown',
+  vibOk: 'detected ✓ ({a} vs noise {b} m/s², ×{r})',
+  vibBad: 'not detected ✗ ({a} vs noise {b} m/s²) — check Android vibration settings, Do Not Disturb and battery saver',
+  helpTitle: 'How to measure', howTitle: 'How it works',
+  helpHtml: `<ol>
+<li><b>Calibrate first</b> on the Calibrate tab: at least 3 known weights (5–6 is better), including 0 g.</li>
+<li>Lay the phone on a firm, level table. <b>Screen-down is recommended</b> — the camera bump makes a phone rock when it lies on its back. Take the case off, or always use the same one.</li>
+<li>Tap <b>Measure</b>. During the countdown, put the object on the phone — always at the same spot, e.g. the middle of the back — and let go.</li>
+<li>Don’t touch the phone or the table. The app waits until everything is still, vibrates 3 times, and beeps when it’s done.</li>
+<li>Read the result and its ± range. “Outside calibrated range” means you need calibration points closer to that weight.</li>
+</ol>
+<p class="muted small">Works best for roughly 20–500 g. Don’t put sharp, hot or wet objects on the phone.</p>`,
+  calHelpHtml: `<ul>
+<li><b>Coins</b> make good reference weights. Look up the official mass from your central bank or mint, and stack identical coins (1, 2, 4, 8…). Examples: 1 € = 7.50 g, 2 € = 8.50 g, US 5¢ = 5.00 g.</li>
+<li><b>Sealed sugar or flour bags</b> (100 g, 250 g, 500 g) are good heavier points. The printed figure is the <i>net</i> weight; the packaging adds a few grams, so check them on a kitchen scale if you can.</li>
+<li>Small sealed bags of rice or sugar, weighed once on a kitchen scale, make a reusable calibration set.</li>
+<li>Cover the whole range you want to weigh and include 0 g. Outside that range the estimate is unreliable.</li>
+<li>Each point is measured 3 times. If its spread is highlighted in amber, measure that point again.</li>
+<li>Recalibrate after changing the table, phone case, orientation, vibration length, Android vibration strength or battery-saver mode.</li>
+</ul>`,
+  howHtml: `<p>The vibration motor shakes the phone with a roughly constant force. The heavier the load on the phone, the less it moves, so the accelerometer sees a smaller vibration.</p>
+<p>For each run the app records the accelerometer, removes gravity with a high-pass filter on each axis, and takes the RMS of the filtered acceleration over the steady part of the vibration (the first and last 0.3 s are ignored). Calibration fits linear, 1/x and exponential curves of amplitude against weight and keeps the one with the best R². The ± range combines the calibration residuals with the spread of the 3 runs.</p>
+<p>Chrome often delivers sensor data at only about 60 Hz, far below the motor’s 150–250 Hz. The amplitude is still usable, but the dominant frequency shown is an apparent (aliased) value.</p>`,
+},
+ar: {
+  appName: 'ميزان الاهتزاز',
+  tabMeasure: 'قياس', tabCal: 'معايرة', tabHelp: 'مساعدة وإعدادات',
+  langBtn: 'English',
+  measureBtn: 'ابدأ القياس', cancelBtn: 'إلغاء',
+  lgRaw: 'التسارع بعد الترشيح', lgEnv: 'الشدة (RMS)', lgWin: 'الجزء المُحلَّل',
+  graphEmpty: 'يظهر منحنى الاهتزاز هنا',
+  runLabel: 'محاولة {i}/{n}',
+  disclaimer: 'هذه قيمة تقديرية فقط. الدقة المعتادة حوالي ±5–15% بعد معايرة جيدة، وتتأثر بالسطح وغطاء الهاتف وموضع الجسم. لا يصلح للبيع والشراء ولا للاستخدام القانوني أو الطبي أو لأغراض السلامة.',
+  unitG: 'جم', unitAcc: 'م/ث²', unitHz: 'هرتز',
+  orient_up: 'الشاشة لأعلى', orient_down: 'الشاشة لأسفل',
+  m_linear: 'خطي', m_inverse: 'عكسي (\u20661/x\u2069)', m_exponential: 'أُسّي',
+  src_auto: 'تلقائي (موصى به)', src_generic: 'Accelerometer (واجهة المستشعرات العامة)', src_devicemotion: 'حدث DeviceMotion',
+  srcShort_generic: 'Accelerometer', srcShort_devicemotion: 'DeviceMotion',
+  calNone: 'غير معاير — اضغط هنا للمعايرة. حتى ذلك الحين تظهر شدة الاهتزاز فقط.',
+  calOk: 'معاير · {n} أوزان · {m} · R² {r2}',
+  calNeedMore: 'المعايرة غير مكتملة: {n} من 3 أوزان على الأقل',
+  stIdle: 'اضغط «ابدأ القياس»، ثم ضع الجسم على الهاتف أثناء العد التنازلي وارفع يدك.',
+  stIdleCal: 'أدخل الوزن المعروف واضغط «قياس 3 مرات»، ثم ضع الوزن على الهاتف أثناء العد التنازلي.',
+  stSensor: 'جارٍ تشغيل مستشعر الحركة…',
+  stCountdown: 'ضع الجسم على الهاتف وارفع يدك… {s}',
+  stStill: 'بانتظار ثبات الهاتف…',
+  stRun: 'المحاولة {i} من {n}: اهتزاز — لا تلمس',
+  stPause: 'انتهت المحاولة {i} من {n}…',
+  stDone: 'تم.', stCancelled: 'تم الإلغاء.',
+  resTitle: 'الوزن التقديري', resAmpOnly: 'شدة الاهتزاز (بدون معايرة)',
+  resPm: '{e} جم ({p})', resPmAmp: 'التفاوت بين المحاولات {e} م/ث²',
+  resPmNote: 'نطاق ثقة ≈95% محسوب من أخطاء المعايرة والتفاوت بين المحاولات',
+  resRuns: 'كل محاولة', resAmp: 'متوسط الشدة', resSpread: 'التفاوت بين المحاولات', resNoise: 'الضوضاء الخلفية',
+  resFreq: 'التردد السائد', resSensor: 'المستشعر',
+  aliasNote: '* تردد ظاهري (aliased): المستشعر يأخذ العينات أبطأ من تردد اهتزاز المحرك.',
+  wOutOfRange: 'خارج نطاق المعايرة ({range} جم). القيمة مستنتجة من خارج النطاق وقد تكون بعيدة جدًا — أضف نقاط معايرة قريبة من هذا الوزن.',
+  wSpread: 'المحاولات غير متسقة بنسبة {cv}%. ثبّت الطاولة وأعد القياس.',
+  wNotStill: 'لم يكن الهاتف ثابتًا تمامًا قبل بدء القياس.',
+  wNotFlat: 'يبدو أن الهاتف ليس موضوعًا بشكل مستوٍ.',
+  wMoved: 'تحرك الهاتف أو الجسم أثناء الاهتزاز. استخدم سطحًا صلبًا مستويًا وغير زلق.',
+  wWeakVib: 'تم تجاهل {k} من المحاولات لعدم وجود اهتزاز واضح.',
+  wOrient: 'اتجاه الهاتف مختلف عن المعايرة (المعايرة: {a}، الآن: {b}).',
+  wRate: 'معدل المستشعر ({now} هرتز) يختلف عن المعايرة ({cal} هرتز). أعد المعايرة إذا بدت النتائج خاطئة.',
+  wDur: 'مدة الاهتزاز ({now} ث) تختلف عن المعايرة ({cal} ث).',
+  wNoCal: 'بدون معايرة — تظهر شدة الاهتزاز فقط.',
+  wFewSamples: 'تم تحليل {n} عينة فقط في كل محاولة ({fs} هرتز). مدة اهتزاز أطول (من الإعدادات) تحسّن الدقة.',
+  noVibration: 'لم يُكتشف اهتزاز (أو أن الجسم ثقيل جدًا). تأكد من تفعيل الاهتزاز في إعدادات أندرويد ← الصوت والاهتزاز، ومن إيقاف «عدم الإزعاج» وموفر البطارية. يمكنك اختبار ذلك من «فحص المستشعرات» في صفحة المساعدة.',
+  noData: 'مستشعر الحركة لا يرسل بيانات. في كروم: ⋮ ← الإعدادات ← إعدادات المواقع ← أجهزة استشعار الحركة ← السماح، ثم أعد تحميل الصفحة.',
+  permDenied: 'الوصول إلى مستشعر الحركة محظور لهذا الموقع. اضغط الأيقونة بجوار شريط العنوان ← الأذونات ← أجهزة استشعار الحركة ← السماح، ثم أعد تحميل الصفحة.',
+  sensorErr: 'تعذر تشغيل مقياس التسارع ({msg}).',
+  noSensor: 'لا توجد واجهة لمقياس التسارع في هذا المتصفح. استخدم كروم على أندرويد.',
+  vibUnsupported: 'هذا المتصفح لا يدعم واجهة الاهتزاز (مثل سفاري على آيفون أو متصفح الحاسوب). استخدم كروم على أندرويد.',
+  vibBlocked: 'منع المتصفح الاهتزاز. المس الصفحة مرة واحدة ثم أعد المحاولة.',
+  insecure: 'تحتاج المستشعرات إلى صفحة آمنة. افتح التطبيق عبر https:// (مثل GitHub Pages) أو localhost أو كملف محلي.',
+  fewSamples: 'عدد عينات المستشعر قليل جدًا ({n}). المعدل منخفض — جرّب مدة اهتزاز أطول أو مصدر المستشعر الآخر من الإعدادات.',
+  hidden: 'توقف القياس: أُخفيت الصفحة أو انطفأت الشاشة.',
+  sensorStopped: 'توقف المستشعر عن إرسال البيانات أثناء القياس.',
+  badWeight: 'أدخل الوزن المعروف بالجرام (مثل 0 أو 20 أو 50).',
+  bNotAndroid: 'مصمم لكروم على أندرويد. قد لا تتوفر واجهات الاهتزاز أو مستشعر الحركة في المتصفحات الأخرى أو على الحاسوب.',
+  calTitle: 'المعايرة',
+  calIntro: 'قِس عدة أوزان معروفة، منها 0 جم (لا شيء على الهاتف). تُقاس كل نقطة 3 مرات ويُحسب المتوسط. استخدم نفس الطاولة وغطاء الهاتف واتجاهه وموضع الجسم الذي ستستخدمه عند القياس.',
+  calWeightLabel: 'الوزن المعروف (جم)', calZero: '0 جم (فارغ)', calMeasureBtn: 'قياس 3 مرات',
+  calPoints: 'نقاط المعايرة',
+  calEmpty: 'لا توجد نقاط بعد. ابدأ بـ 0 جم (بدون أي شيء على الهاتف).',
+  thWeight: 'الوزن', thAmp: 'الشدة', thSpread: 'التفاوت', thFit: 'المنحنى',
+  delPoint: 'حذف النقطة', delConfirm: 'حذف نقطة {w} جم؟',
+  replaceConfirm: 'توجد نقطة لوزن {w} جم بالفعل. هل تريد استبدالها؟',
+  calAdded: 'تمت إضافة {w} جم: الشدة {a} م/ث² (التفاوت {cv}%).',
+  fitTitle: 'منحنى المعايرة',
+  fitEmpty: 'يظهر المنحنى بعد إضافة نقاط',
+  fitNeed: 'أضف 3 أوزان مختلفة على الأقل لحساب المنحنى (لديك {n}).',
+  fitFlat: 'الشدة لا تتغير مع الوزن، لذلك لا يمكن حساب منحنى. تحقق من الإعداد ومن أن الهاتف يهتز.',
+  fitNoModel: 'تعذر إيجاد منحنى مناسب. أعد قياس النقاط غير المتسقة.',
+  fitBest: 'أفضل نموذج: {m} — R² = {r2}',
+  fitEq: 'المعادلة (A بوحدة م/ث²، w بالجرام):',
+  fitAll: 'كل النماذج (R²):',
+  fitErr: 'الخطأ المعتاد على نقاط المعايرة: ±{e} جم',
+  fitIncreasing: 'غير معتاد: الشدة تزيد مع الوزن. تأكد من أن الجسم مستقر تمامًا على الهاتف.',
+  fitMixed: 'النقاط مأخوذة باتجاهات مختلفة للهاتف (الشاشة لأعلى/لأسفل). استخدم اتجاهًا واحدًا.',
+  fitFew: 'نصيحة: 5–6 نقاط موزعة على النطاق تعطي منحنى أدق.',
+  exportBtn: 'تصدير', importBtn: 'استيراد',
+  importOk: 'تم استيراد المعايرة.', importBad: 'هذا ليس ملف معايرة صالحًا.',
+  importConfirm: 'استبدال المعايرة الحالية بالملف المستورد؟',
+  resetBtn: 'إعادة ضبط المعايرة', resetConfirm: 'حذف جميع نقاط المعايرة؟ لا يمكن التراجع عن ذلك.', resetDone: 'تم حذف المعايرة.',
+  calHelpTitle: 'نصائح للمعايرة',
+  setTitle: 'الإعدادات',
+  setDelay: 'تأخير البدء', setDelayHint: 'وقت لوضع الجسم (أو قلب الهاتف) بعد الضغط، ثم ينتظر التطبيق حتى يثبت الهاتف.',
+  setDuration: 'مدة الاهتزاز',
+  setSource: 'مصدر المستشعر', setHint: 'حافظ على نفس الإعدادات أثناء المعايرة والقياس.',
+  setSound: 'صفارة عند الانتهاء',
+  secS: '{s} ث', delayOff: 'بدون',
+  diagTitle: 'فحص المستشعرات', diagIntro: 'تأكد من عمل مقياس التسارع ومحرك الاهتزاز قبل المعايرة.',
+  diagStart: 'تشغيل المستشعر', diagStop: 'إيقاف المستشعر', diagVib: 'اختبار الاهتزاز',
+  dSecure: 'صفحة آمنة', dVibApi: 'واجهة الاهتزاز', dSensorApi: 'واجهات المستشعر', dWakeLock: 'إبقاء الشاشة مضاءة', dPerm: 'إذن الحركة',
+  dSource: 'المصدر', dRate: 'معدل العينات', dAccel: 'x / y / z', dGravity: '|a|', dNoise: 'الضوضاء (RMS)', dOrient: 'الاتجاه', dVibRes: 'اختبار الاهتزاز',
+  yes: 'نعم', no: 'لا', none: 'لا يوجد', testing: 'جارٍ الاختبار…',
+  perm_granted: 'مسموح', perm_denied: 'محظور', perm_prompt: 'سيُطلب', perm_unknown: 'غير معروف',
+  vibOk: 'تم اكتشافه ✓ ({a} مقابل ضوضاء {b} م/ث²، ×{r})',
+  vibBad: 'لم يُكتشف ✗ ({a} مقابل ضوضاء {b} م/ث²) — تحقق من إعدادات الاهتزاز و«عدم الإزعاج» وموفر البطارية',
+  helpTitle: 'طريقة القياس', howTitle: 'كيف يعمل',
+  helpHtml: `<ol>
+<li><b>ابدأ بالمعايرة</b> من تبويب «معايرة»: 3 أوزان معروفة على الأقل (ويُفضّل 5–6)، منها 0 جم.</li>
+<li>ضع الهاتف على طاولة صلبة ومستوية. <b>يُنصح بوضعه والشاشة لأسفل</b>، لأن بروز الكاميرا يجعل الهاتف يتأرجح إذا وُضع على ظهره. انزع الغطاء أو استخدم الغطاء نفسه دائمًا.</li>
+<li>اضغط <b>«ابدأ القياس»</b>، وأثناء العد التنازلي ضع الجسم على الهاتف — في المكان نفسه دائمًا، مثل منتصف الظهر — ثم ارفع يدك.</li>
+<li>لا تلمس الهاتف أو الطاولة. ينتظر التطبيق حتى يثبت كل شيء، ثم يهتز 3 مرات ويصدر صفارة عند الانتهاء.</li>
+<li>اقرأ النتيجة ونطاق ±. عبارة «خارج نطاق المعايرة» تعني أنك تحتاج إلى نقاط معايرة أقرب إلى هذا الوزن.</li>
+</ol>
+<p class="muted small">يعمل بشكل أفضل تقريبًا بين 20 و500 جم. لا تضع أجسامًا حادة أو ساخنة أو مبللة على الهاتف.</p>`,
+  calHelpHtml: `<ul>
+<li><b>العملات المعدنية</b> مراجع وزن ممتازة. ابحث عن وزنها الرسمي في موقع البنك المركزي أو دار سك العملة، وكدّس عملات متطابقة (1، 2، 4، 8…). أمثلة: 1 يورو = 7.50 جم، 2 يورو = 8.50 جم، 5 سنتات أمريكية = 5.00 جم.</li>
+<li><b>أكياس السكر أو الدقيق المغلقة</b> (100 أو 250 أو 500 جم) مناسبة للنقاط الأثقل. الرقم المطبوع هو الوزن <i>الصافي</i>، والعبوة تضيف بضعة جرامات، لذا زِنها بميزان مطبخ إن أمكن.</li>
+<li>أكياس صغيرة مغلقة من الأرز أو السكر تزنها مرة واحدة بميزان مطبخ تصبح مجموعة معايرة دائمة.</li>
+<li>غطِّ كامل النطاق الذي تريد وزنه وأضف نقطة 0 جم. خارج هذا النطاق يكون التقدير غير موثوق.</li>
+<li>تُقاس كل نقطة 3 مرات. إذا ظهر تفاوتها باللون البرتقالي فأعد قياس تلك النقطة.</li>
+<li>أعد المعايرة بعد تغيير الطاولة أو غطاء الهاتف أو اتجاهه أو مدة الاهتزاز أو قوة الاهتزاز في أندرويد أو وضع توفير البطارية.</li>
+</ul>`,
+  howHtml: `<p>يهز محرك الاهتزاز الهاتف بقوة ثابتة تقريبًا. كلما زاد الحمل على الهاتف قلّت حركته، فيقيس مقياس التسارع اهتزازًا أضعف.</p>
+<p>في كل محاولة يسجّل التطبيق قراءات مقياس التسارع، ويزيل الجاذبية بمرشّح تمرير عالٍ على كل محور، ثم يحسب قيمة RMS للتسارع المُرشَّح خلال الجزء الثابت من الاهتزاز (مع تجاهل أول وآخر 0.3 ثانية). أثناء المعايرة يطابق التطبيق منحنيات خطية وعكسية (<bdi dir="ltr">1/x</bdi>) وأُسّية بين الشدة والوزن ويختار الأفضل حسب R². ويجمع نطاق ± بين أخطاء المعايرة والتفاوت بين المحاولات الثلاث.</p>
+<p>غالبًا ما يرسل كروم بيانات المستشعر بمعدل 60 هرتز تقريبًا فقط، وهو أقل بكثير من تردد المحرك (150–250 هرتز). تبقى الشدة صالحة للاستخدام، لكن «التردد السائد» المعروض قيمة ظاهرية (aliased).</p>`,
+},
+};
+
+/* =====================================================================
+   Small helpers
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, def) { try { const v = localStorage.getItem(k); return v == null ? def : JSON.parse(v); } catch (_) { return def; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (_) { return false; } },
+};
+class AppError extends Error { constructor(code, vars) { super(code); this.code = code; this.vars = vars || {}; } }
+const E = (code, vars) => new AppError(code, vars);
+const abortErr = s => (s && s.reason instanceof AppError) ? s.reason : E('cancelled');
+const toAppError = e => e instanceof AppError ? e : E('sensorErr', { msg: (e && e.message) || String(e) });
+
+const mean = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : NaN;
+const sd = a => { if (a.length < 2) return 0; const m = mean(a); return Math.sqrt(a.reduce((s, x) => s + (x - m) ** 2, 0) / (a.length - 1)); };
+const median = a => { if (!a.length) return NaN; const b = [...a].sort((x, y) => x - y), n = b.length; return n % 2 ? b[(n - 1) / 2] : (b[n / 2 - 1] + b[n / 2]) / 2; };
+const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+const sameW = (a, b) => Math.abs(a - b) < 1e-6;
+const mode = a => { const m = new Map(); let best = null, bc = 0; for (const v of a) { if (v == null) continue; const c = (m.get(v) || 0) + 1; m.set(v, c); if (c > bc) { bc = c; best = v; } } return best; };
+
+const fmtW = w => (w == null || !isFinite(w)) ? '—' : (Math.abs(w) < 10 ? String(+w.toFixed(1)) : String(Math.round(w)));
+// First-strong isolate: keeps number lists and mixed-script fragments in order inside Arabic text.
+const iso = s => lang === 'ar' ? '\u2068' + s + '\u2069' : s;
+const fmtA = a => (a == null || !isFinite(a)) ? '—' : a >= 100 ? a.toFixed(0) : a >= 10 ? a.toFixed(1) : a >= 1 ? a.toFixed(2) : a.toFixed(3);
+const sig = x => { if (!isFinite(x)) return '?'; const s = Number(x.toPrecision(4)); return (s !== 0 && Math.abs(s) < 1e-3) ? s.toExponential(3) : String(s); };
+
+function wait(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal && signal.aborted) return reject(abortErr(signal));
+    const onAbort = () => { clearTimeout(id); reject(abortErr(signal)); };
+    const id = setTimeout(() => { if (signal) signal.removeEventListener('abort', onAbort); resolve(); }, ms);
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/* Accepts "12.5", "12,5", Arabic-Indic digits "١٢٫٥", and an optional unit. */
+function parseWeight(str) {
+  if (str == null) return null;
+  const s = String(str).trim()
+    .replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 0x06F0))
+    .replace(/[٫,]/g, '.')
+    .replace(/\s+/g, '')
+    .replace(/(grams?|gr|g|جرام|جم|غ)$/i, '');
+  if (!/^(\d+\.?\d*|\.\d+)$/.test(s)) return null;
+  const v = parseFloat(s);
+  return isFinite(v) && v >= 0 && v <= 10000 ? v : null;
+}
+
+/* =====================================================================
+   State
+   ===================================================================== */
+let lang = store.get(KEYS.lang, null) || ((navigator.language || 'en').toLowerCase().startsWith('ar') ? 'ar' : 'en');
+if (!I18N[lang]) lang = 'en';
+let settings = loadSettings();
+let cal = loadCal();
+let currentFit = null;
+let lastResult = null;
+let busy = null;          // { mode:'measure'|'cal', ctrl:AbortController, phase, runIdx }
+let diag = null;          // live sensor check
+let diagVib = null;       // last vibration test
+let calNote = null;       // { kind, k, v, warnings }
+let permState = 'unknown';
+let banners = [];
+let currentTab = 'measure';
+const traces = { measure: [], cal: [] };
+const statuses = { measure: { k: 'stIdle' }, cal: { k: 'stIdleCal' } };
+const errors = { measure: null, cal: null, diag: null };
+
+function loadSettings() {
+  const s = Object.assign({}, DEFAULT_SETTINGS, store.get(KEYS.settings, {}) || {});
+  if (![2000, 3000, 4000].includes(s.duration)) s.duration = DEFAULT_SETTINGS.duration;
+  if (![0, 3, 5, 10].includes(s.delay)) s.delay = DEFAULT_SETTINGS.delay;
+  if (!['auto', 'generic', 'devicemotion'].includes(s.source)) s.source = 'auto';
+  s.sound = s.sound !== false;
+  return s;
+}
+const saveSettings = () => store.set(KEYS.settings, settings);
+
+function sanitizeCal(c) {
+  if (!c || !Array.isArray(c.points)) return null;
+  const num = v => (typeof v === 'number' && isFinite(v)) ? v : null;
+  const points = [];
+  for (const p of c.points) {
+    if (!p || num(p.w) == null || p.w < 0 || num(p.mean) == null || p.mean <= 0) continue;
+    if (points.some(q => sameW(q.w, p.w))) continue;
+    const amps = Array.isArray(p.amps) ? p.amps.filter(a => num(a) != null && a > 0) : [];
+    points.push({
+      w: p.w, mean: p.mean, amps: amps.length ? amps : [p.mean], sd: num(p.sd) || 0,
+      fs: num(p.fs), orient: p.orient === 'up' || p.orient === 'down' ? p.orient : null,
+      kind: p.kind === 'generic' || p.kind === 'devicemotion' ? p.kind : null,
+      dur: num(p.dur), freq: num(p.freq), t: num(p.t) || Date.now(),
+    });
+  }
+  points.sort((a, b) => a.w - b.w);
+  return { version: 1, points };
+}
+function loadCal() { return sanitizeCal(store.get(KEYS.cal, null)) || { version: 1, points: [] }; }
+const saveCal = () => store.set(KEYS.cal, cal);
+function calMeta() {
+  const p = cal.points;
+  return { orient: mode(p.map(x => x.orient)), fs: median(p.map(x => x.fs).filter(x => x > 0)), dur: mode(p.map(x => x.dur)), kind: mode(p.map(x => x.kind)) };
+}
+
+/* =====================================================================
+   i18n
+   ===================================================================== */
+// Values are wrapped in Unicode isolates in Arabic so numbers like "±3" or "0–200" keep their order.
+function t(key, vars, plain) {
+  let s = I18N[lang][key];
+  if (s == null) s = I18N.en[key];
+  if (s == null) return key;
+  if (vars) s = s.replace(/\{(\w+)\}/g, (m, k) => {
+    let v = vars[k];
+    if (v == null) return '';
+    v = String(v);
+    if (v[0] === '@') v = t(v.slice(1), null, plain);
+    return (lang === 'ar' && !plain) ? '⁨' + v + '⁩' : v;
+  });
+  return s;
+}
+const tp = (k, v) => t(k, v, true); // plain: for canvas, confirm() and aria labels
+
+function applyStatic() {
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  document.title = t('appName');
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); }); // static, trusted strings
+  const lb = $('langBtn');
+  lb.textContent = t('langBtn');
+  lb.setAttribute('lang', lang === 'ar' ? 'en' : 'ar');
+  lb.setAttribute('aria-label', lang === 'ar' ? 'Switch to English' : 'التبديل إلى العربية');
+}
+
+/* =====================================================================
+   Signal processing
+   ===================================================================== */
+// 2nd-order Butterworth high-pass (RBJ cookbook)
+function hpCoeffs(fc, fs) {
+  const w0 = 2 * Math.PI * fc / fs, cs = Math.cos(w0), alpha = Math.sin(w0) / (2 * Math.SQRT1_2), a0 = 1 + alpha;
+  return { b0: (1 + cs) / 2 / a0, b1: -(1 + cs) / a0, b2: (1 + cs) / 2 / a0, a1: -2 * cs / a0, a2: (1 - alpha) / a0 };
+}
+// Direct form II transposed, state initialised to steady state for x[0] (no start-up transient).
+function biquad(x, c) {
+  const y = new Float64Array(x.length);
+  const x0 = x.length ? x[0] : 0;
+  let z1 = (c.b1 + c.b2) * x0, z2 = c.b2 * x0;
+  for (let i = 0; i < x.length; i++) {
+    const xi = x[i], yi = c.b0 * xi + z1;
+    z1 = c.b1 * xi - c.a1 * yi + z2;
+    z2 = c.b2 * xi - c.a2 * yi;
+    y[i] = yi;
+  }
+  return y;
+}
+// Zero-phase filtering (forward + backward)
+function filtfilt(x, c) { const f = biquad(x, c).reverse(); return biquad(f, c).reverse(); }
+
+// Causal 1st-order high-pass on 3 axes, for the live display and the stillness check.
+function makeLiveHP(fc) {
+  const RC = 1 / (2 * Math.PI * fc);
+  let px = null, py = 0, pz = 0, pt = 0, yx = 0, yy = 0, yz = 0;
+  return (t, x, y, z) => {
+    if (px === null) { px = x; py = y; pz = z; pt = t; return 0; }
+    const dt = Math.max(0.0005, (t - pt) / 1000), a = RC / (RC + dt);
+    yx = a * (yx + x - px); yy = a * (yy + y - py); yz = a * (yz + z - pz);
+    px = x; py = y; pz = z; pt = t;
+    return Math.sqrt(yx * yx + yy * yy + yz * yz);
+  };
+}
+
+// Sensor events are not perfectly regular: resample all axes onto a uniform grid.
+function resampleUniform(s) {
+  const dts = [];
+  for (let i = 1; i < s.length; i++) { const d = s[i].t - s[i - 1].t; if (d > 0.2) dts.push(d); }
+  const span = s[s.length - 1].t - s[0].t;
+  const avg = span / (s.length - 1);
+  let dt = median(dts);
+  if (!(dt > 0)) dt = avg;
+  dt = clamp(dt, avg * 0.5, avg * 2);
+  if (!(dt > 0)) throw E('fewSamples', { n: s.length });
+  const n = Math.floor(span / dt) + 1, t0 = s[0].t;
+  const X = new Float64Array(n), Y = new Float64Array(n), Z = new Float64Array(n);
+  let j = 0;
+  for (let i = 0; i < n; i++) {
+    const ti = t0 + i * dt;
+    while (j < s.length - 2 && s[j + 1].t <= ti) j++;
+    const a = s[j], b = s[j + 1] || a, d = b.t - a.t;
+    const u = d > 0 ? clamp((ti - a.t) / d, 0, 1) : 0;
+    X[i] = a.x + (b.x - a.x) * u; Y[i] = a.y + (b.y - a.y) * u; Z[i] = a.z + (b.z - a.z) * u;
+  }
+  return { X, Y, Z, dt, t0, n, fs: 1000 / dt };
+}
+
+// In-place iterative radix-2 FFT
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { let tmp = re[i]; re[i] = re[j]; re[j] = tmp; tmp = im[i]; im[i] = im[j]; im[j] = tmp; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang), half = len >> 1;
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < half; k++) {
+        const p = i + k, q = p + half;
+        const br = re[q] * cr - im[q] * ci, bi = re[q] * ci + im[q] * cr;
+        re[q] = re[p] - br; im[q] = im[p] - bi; re[p] += br; im[p] += bi;
+        const ncr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = ncr;
+      }
+    }
+  }
+}
+// Dominant frequency of the summed 3-axis power spectrum (Hann window, zero-padded, parabolic peak).
+function dominantFreq(axes, i0, i1, fs) {
+  const L = i1 - i0;
+  if (L < 16) return null;
+  let N = 256; while (N < 4 * L && N < 8192) N <<= 1;
+  const P = new Float64Array(N >> 1);
+  for (const h of axes) {
+    const re = new Float64Array(N), im = new Float64Array(N);
+    let m = 0; for (let i = 0; i < L; i++) m += h[i0 + i]; m /= L;
+    for (let i = 0; i < L; i++) re[i] = (h[i0 + i] - m) * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (L - 1)));
+    fft(re, im);
+    for (let k = 0; k < N >> 1; k++) P[k] += re[k] * re[k] + im[k] * im[k];
+  }
+  const kmin = Math.max(1, Math.ceil(0.8 * N / fs));
+  let kb = kmin;
+  for (let k = kmin; k < N >> 1; k++) if (P[k] > P[kb]) kb = k;
+  let d = 0;
+  if (kb > 0 && kb < (N >> 1) - 1) { const a = P[kb - 1], b = P[kb], c = P[kb + 1], den = a - 2 * b + c; if (den < 0) d = clamp(0.5 * (a - c) / den, -0.5, 0.5); }
+  return (kb + d) * fs / N;
+}
+
+/* One run → amplitude.
+   Note: the high-pass is applied to EACH AXIS before taking the vector magnitude. Taking |a| first
+   (gravity included) would make the measurement almost blind to in-plane vibration, because
+   |g + a| ≈ g + a_z when the phone lies flat. */
+function analyzeRun(rec) {
+  let s = rec.samples;
+  if (s.length < 20) throw E('fewSamples', { n: s.length });
+  for (let i = 1; i < s.length; i++) if (s[i].t < s[i - 1].t) { s = s.slice().sort((a, b) => a.t - b.t); break; }
+  const U = resampleUniform(s);
+  const c = hpCoeffs(Math.min(CFG.hpCutoffHz, U.fs / 8), U.fs);
+  const hx = filtfilt(U.X, c), hy = filtfilt(U.Y, c), hz = filtfilt(U.Z, c);
+  const idx = tm => clamp(Math.round((tm - U.t0) / U.dt), 0, U.n);
+  const w0 = idx(rec.tVib + CFG.trimMs), w1 = idx(rec.tVib + rec.durMs - CFG.trimMs);
+  const b0 = idx(rec.tStart + 250), b1 = idx(rec.tVib - 20);
+  const p0 = idx(rec.tVib + rec.durMs + 150), p1 = U.n;
+  if (w1 - w0 < CFG.minWindowSamples) throw E('fewSamples', { n: Math.max(0, w1 - w0) });
+  const rmsOf = (i0, i1) => { if (i1 - i0 < 3) return NaN; let a = 0; for (let i = i0; i < i1; i++) a += hx[i] * hx[i] + hy[i] * hy[i] + hz[i] * hz[i]; return Math.sqrt(a / (i1 - i0)); };
+  const meanVec = (i0, i1) => { if (i1 - i0 < 3) return null; let x = 0, y = 0, z = 0; for (let i = i0; i < i1; i++) { x += U.X[i]; y += U.Y[i]; z += U.Z[i]; } const k = i1 - i0; return [x / k, y / k, z / k]; };
+  const rms = rmsOf(w0, w1);
+  const base = rmsOf(b0, b1);
+  const g = meanVec(b0, b1) || meanVec(0, w0) || [0, 0, 9.81];
+  const gPost = meanVec(p0, p1);
+  const gNorm = Math.hypot(g[0], g[1], g[2]);
+  return {
+    rms, base: isFinite(base) ? base : 0, fs: U.fs, nWin: w1 - w0,
+    freq: dominantFreq([hx, hy, hz], w0, w1, U.fs),
+    g, gNorm, flat: gNorm > 0 ? Math.abs(g[2]) / gNorm : 0, orient: g[2] >= 0 ? 'up' : 'down',
+    shift: gPost ? Math.hypot(gPost[0] - g[0], gPost[1] - g[1], gPost[2] - g[2]) : 0,
+  };
+}
+
+/* =====================================================================
+   Calibration curve fitting
+   ===================================================================== */
+function wls(x, y, v) {
+  let S = 0, Sx = 0, Sy = 0, Sxx = 0, Sxy = 0;
+  for (let i = 0; i < x.length; i++) { const w = v[i]; S += w; Sx += w * x[i]; Sy += w * y[i]; Sxx += w * x[i] * x[i]; Sxy += w * x[i] * y[i]; }
+  const D = S * Sxx - Sx * Sx;
+  if (!(Math.abs(D) > 0)) return null;
+  return [(Sxx * Sy - Sx * Sxy) / D, (S * Sxy - Sx * Sy) / D];
+}
+const normW = v => { const m = Math.max(...v); return m > 0 ? v.map(x => x / m) : v; };
+
+/* A = amplitude (m/s²), w = weight (g). Each model has 2 parameters, so R² is a fair comparison.
+   Initial values come from weighted linearisations; Levenberg–Marquardt then refines them so
+   every model is the least-squares fit in amplitude space. */
+const MODELS = {
+  linear: {          // A = a + b·w
+    init: (w, a) => wls(w, a, a.map(() => 1)),
+    f: (x, p) => p[0] + p[1] * x,
+    grad: (x) => [1, x],
+    dfdx: (x, p) => p[1],
+    inv: (A, p) => (A - p[0]) / p[1],
+    ok: p => p[1] !== 0,
+    eq: p => `A = ${sig(p[0])} ${p[1] < 0 ? '−' : '+'} ${sig(Math.abs(p[1]))}·w`,
+  },
+  inverse: {         // A = 1 / (p + q·w)   (≈ F / (m_phone + w)·ω², i.e. the 1/x family that stays finite at w = 0)
+    init: (w, a) => wls(w, a.map(v => 1 / v), normW(a.map(v => v ** 4))),
+    f: (x, p) => 1 / (p[0] + p[1] * x),
+    grad: (x, p) => { const f = 1 / (p[0] + p[1] * x); return [-f * f, -x * f * f]; },
+    dfdx: (x, p) => { const f = 1 / (p[0] + p[1] * x); return -p[1] * f * f; },
+    inv: (A, p) => (1 / A - p[0]) / p[1],
+    ok: (p, lo, hi) => p[1] !== 0 && p[0] + p[1] * lo > 0 && p[0] + p[1] * hi > 0,
+    eq: p => `A = 1 / (${sig(p[0])} ${p[1] < 0 ? '−' : '+'} ${sig(Math.abs(p[1]))}·w)`,
+  },
+  exponential: {     // A = c·e^(k·w)
+    init: (w, a) => { const r = wls(w, a.map(Math.log), normW(a.map(v => v * v))); return r && [Math.exp(r[0]), r[1]]; },
+    f: (x, p) => p[0] * Math.exp(p[1] * x),
+    grad: (x, p) => { const e = Math.exp(p[1] * x); return [e, p[0] * x * e]; },
+    dfdx: (x, p) => p[0] * p[1] * Math.exp(p[1] * x),
+    inv: (A, p) => Math.log(A / p[0]) / p[1],
+    ok: p => p[0] > 0 && p[1] !== 0,
+    eq: p => `A = ${sig(p[0])}·e^(${sig(p[1])}·w)`,
+  },
+};
+
+function refineLM(M, xs, ys, p0, lo, hi) {
+  let p = p0.slice();
+  const sse = q => { let s = 0; for (let i = 0; i < xs.length; i++) { const r = ys[i] - M.f(xs[i], q); s += r * r; } return s; };
+  let cur = sse(p), lam = 1e-3;
+  for (let it = 0; it < 200; it++) {
+    let a11 = 0, a12 = 0, a22 = 0, g1 = 0, g2 = 0;
+    for (let i = 0; i < xs.length; i++) {
+      const j = M.grad(xs[i], p), r = ys[i] - M.f(xs[i], p);
+      a11 += j[0] * j[0]; a12 += j[0] * j[1]; a22 += j[1] * j[1]; g1 += j[0] * r; g2 += j[1] * r;
+    }
+    let improved = false, rel = 0;
+    while (lam < 1e12) {
+      const b11 = a11 * (1 + lam), b22 = a22 * (1 + lam), det = b11 * b22 - a12 * a12;
+      if (Math.abs(det) > 0) {
+        const q = [p[0] + (g1 * b22 - a12 * g2) / det, p[1] + (b11 * g2 - a12 * g1) / det];
+        if (q.every(isFinite) && M.ok(q, lo, hi)) {
+          const s = sse(q);
+          if (isFinite(s) && s < cur) { rel = (cur - s) / (cur || 1); p = q; cur = s; lam = Math.max(lam / 3, 1e-15); improved = true; break; }
+        }
+      }
+      lam *= 4;
+    }
+    if (!improved || rel < 1e-13) break;
+  }
+  return p;
+}
+
+function fitCalibration(points) {
+  const pts = points.filter(p => p.mean > 0 && isFinite(p.w));
+  const distinct = new Set(pts.map(p => p.w)).size;
+  if (distinct < 3) return { ok: false, reason: 'fitNeed', n: distinct };
+  const xs = pts.map(p => p.w), ys = pts.map(p => p.mean), n = pts.length;
+  const lo = Math.min(...xs), hi = Math.max(...xs);
+  const ym = mean(ys), sst = ys.reduce((s, y) => s + (y - ym) ** 2, 0);
+  if (!(sst > 1e-12 * ym * ym)) return { ok: false, reason: 'fitFlat', n: distinct };
+  const models = [];
+  for (const name of Object.keys(MODELS)) {
+    const M = MODELS[name];
+    try {
+      let p = M.init(xs, ys);
+      if (!p || !p.every(isFinite) || !M.ok(p, lo, hi)) continue;
+      p = refineLM(M, xs, ys, p, lo, hi);
+      const pred = xs.map(x => M.f(x, p));
+      if (!pred.every(isFinite)) continue;
+      const d1 = M.dfdx(lo, p), d2 = M.dfdx(hi, p);
+      if (!(d1 * d2 > 0)) continue;                 // must be monotonic over the range to be invertible
+      const sse = ys.reduce((s, y, i) => s + (y - pred[i]) ** 2, 0);
+      models.push({ name, p, sse, r2: 1 - sse / sst });
+    } catch (_) { /* skip model */ }
+  }
+  if (!models.length) return { ok: false, reason: 'fitNoModel', n: distinct };
+  models.sort((a, b) => b.r2 - a.r2);
+  const best = models[0], M = MODELS[best.name], dof = Math.max(1, n - 2);
+  const sA = Math.sqrt(best.sse / dof);
+  const wRes = pts.map(pt => M.inv(pt.mean, best.p) - pt.w);
+  const rmseW = Math.sqrt(wRes.reduce((s, r) => s + r * r, 0) / dof);
+  return {
+    ok: true, n, distinct, model: best.name, p: best.p, r2: best.r2, sA, rmseW, models,
+    wMin: lo, wMax: hi, aMin: Math.min(...ys), aMax: Math.max(...ys), increasing: M.dfdx(lo, best.p) > 0,
+  };
+}
+
+/* Weight from mean amplitude. ± is ≈95 % (2σ): amplitude uncertainty of a new measurement
+   (calibration residual SD or this measurement's own standard error, whichever is larger,
+   plus curve uncertainty) propagated through the local slope of the curve. */
+function estimateWeight(fit, amp, sem) {
+  const M = MODELS[fit.model];
+  const tol = Math.max(fit.sA, 0.02 * amp);
+  const outOfRange = amp < fit.aMin - tol || amp > fit.aMax + tol;
+  const w = M.inv(amp, fit.p);
+  if (!isFinite(w)) return { w: null, err: null, outOfRange: true };
+  const slope = Math.abs(M.dfdx(w, fit.p));
+  const sigA = Math.sqrt(Math.max(fit.sA * fit.sA, sem * sem) + fit.sA * fit.sA / fit.n);
+  let err = slope > 0 ? 2 * sigA / slope : null;
+  if (err != null && !isFinite(err)) err = null;
+  return { w, err, outOfRange };
+}
+
+/* =====================================================================
+   Sensors
+   ===================================================================== */
+const hub = {
+  kind: null, active: false, listeners: new Set(), lastArrival: 0, _stop: null,
+  on(fn) { this.listeners.add(fn); },
+  off(fn) { this.listeners.delete(fn); },
+  emit(t, x, y, z) {
+    this.lastArrival = performance.now();
+    for (const fn of this.listeners) { try { fn(t, x, y, z); } catch (e) { console.error(e); } }
+  },
+  async start(pref) {
+    if (this.active && (pref === 'auto' || pref === this.kind)) return this.kind;
+    this.stop();
+    const order = pref === 'generic' ? ['generic'] : pref === 'devicemotion' ? ['devicemotion'] : ['generic', 'devicemotion'];
+    const errs = [];
+    for (const k of order) {
+      if (k === 'generic' && !('Accelerometer' in window)) { errs.push(E('noSensor')); continue; }
+      if (k === 'devicemotion' && !('DeviceMotionEvent' in window)) { errs.push(E('noSensor')); continue; }
+      try {
+        await (k === 'generic' ? this._generic() : this._deviceMotion());
+        this.kind = k; this.active = true; this.lastArrival = performance.now();
+        return k;
+      } catch (e) { errs.push(toAppError(e)); }
+    }
+    // Report the most useful reason
+    throw errs.find(e => e.code === 'permDenied') || errs.find(e => e.code === 'noData') || errs.find(e => e.code !== 'noSensor') || errs[0] || E('noSensor');
+  },
+  stop() {
+    if (this._stop) { try { this._stop(); } catch (_) {} }
+    this._stop = null; this.active = false; this.kind = null;
+  },
+  // Sensor timestamps should share performance.now()'s time base; if not, re-base them on arrival time.
+  _timeFix() {
+    let offset = null;
+    return ts => {
+      const now = performance.now();
+      if (!(ts > 0)) ts = now;
+      if (offset === null || Math.abs(ts + offset - now) > 1000) offset = Math.abs(now - ts) > 300 ? now - ts : 0;
+      return ts + offset;
+    };
+  },
+  async _generic() {
+    if (navigator.permissions && navigator.permissions.query) {
+      try { const st = await navigator.permissions.query({ name: 'accelerometer' }); if (st.state === 'denied') throw E('permDenied'); }
+      catch (e) { if (e instanceof AppError) throw e; }
+    }
+    let sensor;
+    try { sensor = new Accelerometer({ frequency: CFG.requestHz, referenceFrame: 'device' }); }
+    catch (e) {
+      if (e && e.name === 'SecurityError') throw E('permDenied');
+      try { sensor = new Accelerometer({ frequency: 60 }); }
+      catch (e2) { throw E(e2 && e2.name === 'SecurityError' ? 'permDenied' : 'sensorErr', { msg: (e2 && e2.message) || String(e2) }); }
+    }
+    const fix = this._timeFix();
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const cleanup = () => {
+        sensor.removeEventListener('reading', onReading);
+        sensor.removeEventListener('error', onError);
+        try { sensor.stop(); } catch (_) {}
+      };
+      const timer = setTimeout(() => { if (!settled) { settled = true; cleanup(); reject(E('noData')); } }, 3000);
+      const onReading = () => {
+        if (sensor.x == null) return;
+        const t = fix(sensor.timestamp);
+        if (!settled) { settled = true; clearTimeout(timer); this._stop = cleanup; resolve(); }
+        this.emit(t, sensor.x, sensor.y, sensor.z);
+      };
+      const onError = ev => {
+        const er = ev && ev.error;
+        const code = er && (er.name === 'NotAllowedError' || er.name === 'SecurityError') ? 'permDenied' : er && er.name === 'NotReadableError' ? 'noData' : 'sensorErr';
+        const ae = E(code, { msg: er ? `${er.name}: ${er.message}` : '?' });
+        if (!settled) { settled = true; clearTimeout(timer); cleanup(); reject(ae); }
+        else console.warn('Sensor error', ae);
+      };
+      sensor.addEventListener('reading', onReading);
+      sensor.addEventListener('error', onError);
+      try { sensor.start(); }
+      catch (e) { settled = true; clearTimeout(timer); cleanup(); reject(E('sensorErr', { msg: (e && e.message) || String(e) })); }
+    });
+  },
+  async _deviceMotion() {
+    // iOS Safari and recent Chrome versions expose requestPermission(). Chrome may answer "prompt"
+    // even though events flow, so only an explicit "denied" is fatal; otherwise the no-data timeout decides.
+    if (typeof DeviceMotionEvent.requestPermission === 'function') {
+      let r = null;
+      try { r = await DeviceMotionEvent.requestPermission(); } catch (_) { r = null; }
+      if (r === 'denied') throw E('permDenied');
+    }
+    const fix = this._timeFix();
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const h = e => {
+        const a = e.accelerationIncludingGravity;   // raw accelerometer (not the fused, smoothed "acceleration")
+        if (!a || a.x == null || a.y == null || a.z == null) return;
+        const t = fix(e.timeStamp);
+        if (!settled) { settled = true; clearTimeout(timer); this._stop = () => window.removeEventListener('devicemotion', h); resolve(); }
+        this.emit(t, a.x, a.y, a.z);
+      };
+      const timer = setTimeout(() => { if (!settled) { settled = true; window.removeEventListener('devicemotion', h); reject(E('noData')); } }, 3000);
+      window.addEventListener('devicemotion', h);
+    });
+  },
+};
+
+function capabilityBlocker() {
+  if (!window.isSecureContext) return E('insecure');
+  if (typeof navigator.vibrate !== 'function') return E('vibUnsupported');
+  if (!('Accelerometer' in window) && !('DeviceMotionEvent' in window)) return E('noSensor');
+  return null;
+}
+
+/* Record one run: baseline → vibrate(durMs) → post. Fills `trace` for the live graph. */
+function record({ baselineMs, durMs, postMs, signal, trace }) {
+  return new Promise((resolve, reject) => {
+    const samples = [];
+    const hp = makeLiveHP(CFG.hpCutoffHz);
+    const tStart = performance.now();
+    const timers = [];
+    let tVib = 0, finished = false;
+    if (trace) { trace.tStart = tStart; trace.total = baselineMs + durMs + postMs; trace.durMs = durMs; trace.pts = []; }
+    const onS = (t, x, y, z) => {
+      samples.push({ t, x, y, z });
+      const m = hp(t, x, y, z);
+      if (trace) trace.pts.push([t - tStart, m]);
+    };
+    const cleanup = () => {
+      finished = true; hub.off(onS); timers.forEach(clearTimeout); clearInterval(wd);
+      if (signal) signal.removeEventListener('abort', onAbort);
+    };
+    const fail = e => { if (finished) return; cleanup(); try { navigator.vibrate(0); } catch (_) {} reject(e); };
+    const onAbort = () => fail(abortErr(signal));
+    const wd = setInterval(() => { if (performance.now() - hub.lastArrival > 1500) fail(E('sensorStopped')); }, 300);
+    if (signal) { if (signal.aborted) { onAbort(); return; } signal.addEventListener('abort', onAbort); }
+    hub.on(onS);
+    timers.push(setTimeout(() => {
+      if (finished) return;
+      tVib = performance.now();
+      if (trace) trace.tVib = tVib;
+      let ok = false;
+      try { ok = navigator.vibrate(durMs); } catch (_) { ok = false; }
+      if (ok === false) { fail(E('vibBlocked')); return; }
+      timers.push(setTimeout(() => {
+        if (finished) return;
+        cleanup();
+        resolve({ samples, tStart, tVib, durMs, tEnd: performance.now() });
+      }, durMs + postMs));
+    }, baselineMs));
+  });
+}
+
+/* Resolve true once the filtered acceleration stays quiet for stillHoldMs, false on timeout. */
+function waitForStill(signal) {
+  return new Promise((resolve, reject) => {
+    const hp = makeLiveHP(CFG.hpCutoffHz), t0 = performance.now(), buf = [];
+    let sum = 0, stillSince = null, done = false;
+    const finish = (v, e) => {
+      if (done) return; done = true; hub.off(onS); clearInterval(wd);
+      if (signal) signal.removeEventListener('abort', onAbort);
+      if (e) reject(e); else resolve(v);
+    };
+    const onAbort = () => finish(null, abortErr(signal));
+    const onS = (t, x, y, z) => {
+      const m = hp(t, x, y, z), e = m * m;
+      buf.push([t, e]); sum += e;
+      while (buf.length > 1 && buf[0][0] < t - 500) sum -= buf.shift()[1];
+      const now = performance.now();
+      if (now - t0 < 400) return;
+      const rms = Math.sqrt(Math.max(0, sum) / buf.length);
+      if (rms < CFG.stillThresh) { if (stillSince === null) stillSince = now; if (now - stillSince >= CFG.stillHoldMs) finish(true); }
+      else stillSince = null;
+      if (now - t0 > CFG.stillTimeoutMs) finish(false);
+    };
+    const wd = setInterval(() => { if (performance.now() - hub.lastArrival > 1500) finish(null, E('sensorStopped')); }, 300);
+    if (signal) { if (signal.aborted) { onAbort(); return; } signal.addEventListener('abort', onAbort); }
+    hub.on(onS);
+  });
+}
+
+/* =====================================================================
+   Measurement session (shared by Measure and Calibrate)
+   ===================================================================== */
+async function startSession(area) {
+  if (busy) return;
+  errors[area] = null;
+  if (area === 'cal') calNote = null;
+  renderMessages();
+  let weight = null;
+  if (area === 'cal') {
+    weight = parseWeight($('calWeight').value);
+    if (weight === null) { errors.cal = E('badWeight'); renderMessages(); $('calWeight').focus(); return; }
+    if (cal.points.some(p => sameW(p.w, weight)) && !confirm(tp('replaceConfirm', { w: fmtW(weight) }))) return;
+  }
+  const blocker = capabilityBlocker();
+  if (blocker) { errors[area] = blocker; renderMessages(); return; }
+  stopDiag();
+  unlockAudio();
+  const ctrl = new AbortController();
+  busy = { mode: area, ctrl, phase: 'sensor', runIdx: -1 };
+  traces[area] = [];
+  setBar(area, 0);
+  setBusyUI();
+  kick();
+  try {
+    setStatus(area, 'stSensor');
+    const kind = await hub.start(settings.source);
+    acquireWakeLock();
+    busy.phase = 'countdown';
+    for (let s = settings.delay; s > 0; s--) {
+      setStatus(area, 'stCountdown', { s });
+      beep('tick');
+      await wait(1000, ctrl.signal);
+    }
+    busy.phase = 'still';
+    setStatus(area, 'stStill');
+    const still = await waitForStill(ctrl.signal);
+    const runs = [];
+    for (let i = 0; i < CFG.repeats; i++) {
+      busy.phase = 'run'; busy.runIdx = i;
+      const trace = { pts: [], tStart: performance.now(), tVib: 0, durMs: settings.duration, total: 1, rms: null };
+      traces[area].push(trace);
+      setStatus(area, 'stRun', { i: i + 1, n: CFG.repeats });
+      const rec = await record({ baselineMs: CFG.baselineMs, durMs: settings.duration, postMs: CFG.postMs, signal: ctrl.signal, trace });
+      const r = analyzeRun(rec);
+      trace.rms = r.rms;
+      runs.push(r);
+      if (i < CFG.repeats - 1) {
+        busy.phase = 'pause';
+        setStatus(area, 'stPause', { i: i + 1, n: CFG.repeats });
+        await wait(CFG.pauseMs, ctrl.signal);
+      }
+    }
+    busy.phase = 'done';
+    const res = summarizeRuns(runs, still, kind);
+    if (area === 'measure') finishMeasure(res); else finishCal(res, weight);
+    setStatus(area, 'stDone');
+    setBar(area, 1);
+    beep('done');
+  } catch (e) {
+    const err = toAppError(e);
+    if (err.code === 'cancelled') setStatus(area, 'stCancelled');
+    else { setStatus(area, null); errors[area] = err; renderMessages(); beep('error'); }
+    setBar(area, 0);
+  } finally {
+    try { navigator.vibrate(0); } catch (_) {}
+    releaseWakeLock();
+    if (!diag) hub.stop();
+    busy = null;
+    setBusyUI();
+    drawAll();
+  }
+}
+
+function cancelSession() {
+  if (!busy) return;
+  try { navigator.vibrate(0); } catch (_) {}
+  busy.ctrl.abort(E('cancelled'));
+}
+
+function summarizeRuns(runs, still, kind) {
+  const warnings = [];
+  const used = runs.filter(r => r.rms >= Math.max(CFG.vibAbsMin, CFG.vibRatioMin * r.base));
+  if (!used.length) throw E('noVibration');
+  if (used.length < runs.length) warnings.push({ k: 'wWeakVib', v: { k: runs.length - used.length } });
+  const amps = used.map(r => r.rms);
+  const m = mean(amps), s = sd(amps), cv = m > 0 ? s / m : 0;
+  if (used.length >= 2 && cv > CFG.cvWarn) warnings.push({ k: 'wSpread', v: { cv: (cv * 100).toFixed(0) } });
+  if (!still) warnings.push({ k: 'wNotStill' });
+  if (Math.min(...runs.map(r => r.flat)) < CFG.flatMin) warnings.push({ k: 'wNotFlat' });
+  if (runs.some(r => r.shift > CFG.shiftMax)) warnings.push({ k: 'wMoved' });
+  const fs = mean(runs.map(r => r.fs)), nWin = Math.min(...used.map(r => r.nWin));
+  if (nWin < CFG.fewWindowSamples) warnings.push({ k: 'wFewSamples', v: { n: nWin, fs: fs.toFixed(0) } });
+  const freqs = used.map(r => r.freq).filter(f => f != null && isFinite(f));
+  return {
+    runs, used, amps, mean: m, sd: s, cv, sem: used.length > 1 ? s / Math.sqrt(used.length) : 0,
+    base: mean(runs.map(r => r.base)), fs, freq: freqs.length ? median(freqs) : null,
+    orient: mode(runs.map(r => r.orient)), kind, warnings, nWin, t: Date.now(),
+  };
+}
+
+function finishMeasure(res) {
+  const out = Object.assign({}, res, { est: null, runW: null, warnings: res.warnings.slice() });
+  const fit = currentFit;
+  if (fit && fit.ok) {
+    const M = MODELS[fit.model];
+    out.est = estimateWeight(fit, res.mean, res.sem);
+    out.runW = res.used.map(r => M.inv(r.rms, fit.p));
+    if (out.est.outOfRange) out.warnings.unshift({ k: 'wOutOfRange', v: { range: `${fmtW(fit.wMin)}–${fmtW(fit.wMax)}` } });
+    const cm = calMeta();
+    if (cm.orient && res.orient && cm.orient !== res.orient) out.warnings.push({ k: 'wOrient', v: { a: '@orient_' + cm.orient, b: '@orient_' + res.orient } });
+    if (cm.fs > 0 && Math.abs(res.fs - cm.fs) / cm.fs > 0.2) out.warnings.push({ k: 'wRate', v: { now: res.fs.toFixed(0), cal: cm.fs.toFixed(0) } });
+    if (cm.dur && cm.dur !== settings.duration) out.warnings.push({ k: 'wDur', v: { now: settings.duration / 1000, cal: cm.dur / 1000 } });
+  } else {
+    out.warnings.unshift({ k: 'wNoCal' });
+  }
+  lastResult = out;
+  renderResult();
+  drawFit();
+}
+
+function finishCal(res, weight) {
+  const pt = {
+    w: weight, mean: res.mean, amps: res.amps.map(a => +a.toPrecision(6)), sd: res.sd,
+    fs: +res.fs.toFixed(2), orient: res.orient, kind: res.kind, dur: settings.duration,
+    freq: res.freq != null ? +res.freq.toFixed(2) : null, t: Date.now(),
+  };
+  cal.points = cal.points.filter(p => !sameW(p.w, weight));
+  cal.points.push(pt);
+  cal.points.sort((a, b) => a.w - b.w);
+  saveCal();
+  refit();
+  calNote = { kind: 'ok', k: 'calAdded', v: { w: fmtW(weight), a: fmtA(res.mean), cv: (res.cv * 100).toFixed(1) }, warnings: res.warnings };
+  $('calWeight').value = '';
+  renderCal();
+  renderChip();
+  renderMessages();
+}
+
+function refit() { currentFit = fitCalibration(cal.points); }
+
+/* =====================================================================
+   Wake lock & sound
+   ===================================================================== */
+let wakeLock = null;
+async function acquireWakeLock() {
+  try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } }
+  catch (_) { wakeLock = null; }
+}
+function releaseWakeLock() { try { if (wakeLock) wakeLock.release(); } catch (_) {} wakeLock = null; }
+
+let actx = null;
+function unlockAudio() {
+  if (!settings.sound) return;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!actx) actx = new AC();
+    if (actx.state === 'suspended') actx.resume();
+  } catch (_) { actx = null; }
+}
+// Never called while recording, so the speaker cannot pollute the measurement.
+function beep(kind) {
+  if (!settings.sound || !actx) return;
+  const seq = kind === 'done' ? [[880, 0, 0.12], [1320, 0.16, 0.18]] : kind === 'tick' ? [[660, 0, 0.05]] : [[220, 0, 0.35]];
+  try {
+    for (const [f, at, d] of seq) {
+      const o = actx.createOscillator(), g = actx.createGain(), t0 = actx.currentTime + at;
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.25, t0 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+      o.connect(g); g.connect(actx.destination);
+      o.start(t0); o.stop(t0 + d + 0.03);
+    }
+  } catch (_) {}
+}
+
+/* =====================================================================
+   Diagnostics
+   ===================================================================== */
+async function startDiag() {
+  if (busy || diag) return;
+  errors.diag = null; renderMessages();
+  const blocker = !window.isSecureContext ? E('insecure') : null;
+  if (blocker) { errors.diag = blocker; renderMessages(); return; }
+  diag = { kind: null, starting: true, times: [], last: null, hp: makeLiveHP(CFG.hpCutoffHz), buf: [], sum: 0, noise: 0, vibBusy: false };
+  renderDiag();
+  try {
+    const kind = await hub.start(settings.source);
+    if (!diag) { if (!busy) hub.stop(); return; }
+    diag.kind = kind; diag.starting = false;
+    diag.onS = (t, x, y, z) => {
+      const d = diag; if (!d) return;
+      d.times.push(t); while (d.times.length && d.times[0] < t - 1000) d.times.shift();
+      d.last = [x, y, z];
+      const m = d.hp(t, x, y, z), e = m * m;
+      d.buf.push([t, e]); d.sum += e;
+      while (d.buf.length > 1 && d.buf[0][0] < t - 500) d.sum -= d.buf.shift()[1];
+      d.noise = Math.sqrt(Math.max(0, d.sum) / d.buf.length);
+    };
+    hub.on(diag.onS);
+    diag.timer = setInterval(renderDiag, 200);
+  } catch (e) {
+    errors.diag = toAppError(e);
+    diag = null;
+    renderMessages();
+  }
+  renderDiag();
+}
+function stopDiag() {
+  if (!diag) return;
+  if (diag.onS) hub.off(diag.onS);
+  clearInterval(diag.timer);
+  diag = null;
+  if (!busy) hub.stop();
+  renderDiag();
+}
+async function testVibration() {
+  if (busy || (diag && diag.vibBusy)) return;
+  errors.diag = null; renderMessages();
+  const blocker = capabilityBlocker();
+  if (blocker) { errors.diag = blocker; renderMessages(); return; }
+  const autoStarted = !diag;
+  if (!diag) { await startDiag(); if (!diag || diag.starting) return; }
+  diag.vibBusy = true; diagVib = null; renderDiag();
+  try {
+    await wait(400);
+    const rec = await record({ baselineMs: 600, durMs: 1000, postMs: 300 });
+    const r = analyzeRun(rec);
+    diagVib = { rms: r.rms, base: r.base, ok: r.rms >= Math.max(CFG.vibAbsMin, CFG.vibRatioMin * r.base), fs: r.fs };
+  } catch (e) {
+    errors.diag = toAppError(e);
+  } finally {
+    if (diag) diag.vibBusy = false;
+    if (autoStarted) stopDiag();
+    renderDiag(); renderMessages();
+  }
+}
+
+/* =====================================================================
+   Rendering
+   ===================================================================== */
+function alertEl(kind, text) {
+  const d = document.createElement('div');
+  d.className = 'alert ' + kind;
+  d.setAttribute('role', kind === 'err' ? 'alert' : 'status');
+  const s = document.createElement('span'); s.textContent = text; d.appendChild(s);
+  return d;
+}
+function kvRows(dl, rows) {
+  dl.replaceChildren();
+  for (const [k, v, cls] of rows) {
+    const dt = document.createElement('dt'); dt.textContent = k;
+    const dd = document.createElement('dd'); dd.textContent = v; if (cls) dd.className = cls;
+    dl.append(dt, dd);
+  }
+}
+
+function computeBanners() {
+  banners = [];
+  if (!window.isSecureContext) banners.push({ kind: 'err', k: 'insecure' });
+  if (typeof navigator.vibrate !== 'function') banners.push({ kind: 'err', k: 'vibUnsupported' });
+  if (!('Accelerometer' in window) && !('DeviceMotionEvent' in window)) banners.push({ kind: 'err', k: 'noSensor' });
+  if (permState === 'denied') banners.push({ kind: 'err', k: 'permDenied' });
+  if (!banners.length && !/Android/i.test(navigator.userAgent)) banners.push({ kind: 'info', k: 'bNotAndroid' });
+}
+function renderBanners() { $('banners').replaceChildren(...banners.map(b => alertEl(b.kind, t(b.k)))); }
+
+function renderChip() {
+  const chip = $('calChip'), fit = currentFit;
+  if (fit && fit.ok) { chip.className = 'chip ok'; chip.textContent = '✓ ' + t('calOk', { n: fit.distinct, m: '@m_' + fit.model, r2: fit.r2.toFixed(3) }); }
+  else if (cal.points.length) { chip.className = 'chip warn'; chip.textContent = t('calNeedMore', { n: fit ? fit.n : 0 }); }
+  else { chip.className = 'chip warn'; chip.textContent = t('calNone'); }
+}
+
+function setStatus(area, k, v) { statuses[area] = k ? { k, v } : null; renderStatus(area); }
+function renderStatus(area) {
+  const el = $(area === 'measure' ? 'measStatus' : 'calStatus'), s = statuses[area];
+  el.textContent = s ? t(s.k, s.v) : '';
+  el.classList.toggle('live', !!(busy && busy.mode === area));
+}
+function setBar(area, f) { $(area === 'measure' ? 'measBar' : 'calBar').style.width = (clamp(f, 0, 1) * 100).toFixed(1) + '%'; }
+
+function renderMessages() {
+  const m = $('measMsg'); m.replaceChildren();
+  if (errors.measure) m.appendChild(alertEl('err', t(errors.measure.code, errors.measure.vars)));
+  const c = $('calMsg'); c.replaceChildren();
+  if (errors.cal) c.appendChild(alertEl('err', t(errors.cal.code, errors.cal.vars)));
+  if (calNote) {
+    c.appendChild(alertEl(calNote.kind, t(calNote.k, calNote.v)));
+    for (const w of calNote.warnings || []) c.appendChild(alertEl('warn', t(w.k, w.v)));
+  }
+  const d = $('diagMsg'); d.replaceChildren();
+  if (errors.diag) d.appendChild(alertEl('err', t(errors.diag.code, errors.diag.vars)));
+}
+
+function setBusyUI() {
+  document.body.toggleAttribute('data-busy', !!busy);
+  const area = busy && busy.mode;
+  const mb = $('measureBtn'), cb = $('calMeasureBtn');
+  mb.textContent = area === 'measure' ? t('cancelBtn') : t('measureBtn');
+  mb.classList.toggle('stop', area === 'measure'); mb.classList.toggle('primary', area !== 'measure');
+  mb.disabled = !!busy && area !== 'measure';
+  cb.textContent = area === 'cal' ? t('cancelBtn') : t('calMeasureBtn');
+  cb.classList.toggle('stop', area === 'cal'); cb.classList.toggle('primary', area !== 'cal');
+  cb.disabled = !!busy && area !== 'cal';
+  for (const id of ['calWeight', 'calZero', 'resetBtn', 'importBtn', 'exportBtn', 'diagBtn', 'diagVibBtn', 'setSound']) $(id).disabled = !!busy;
+  document.querySelectorAll('.seg button, .caltable .icon-btn').forEach(b => { b.disabled = !!busy; });
+  renderStatus('measure'); renderStatus('cal');
+  renderDiag();
+}
+
+function renderResult() {
+  const r = lastResult, card = $('resultCard');
+  if (!r) { card.hidden = true; return; }
+  card.hidden = false;
+  const unitG = t('unitG'), unitA = t('unitAcc');
+  if (r.est) {
+    const w = r.est.w;
+    $('resLabel').textContent = t('resTitle');
+    $('resValue').textContent = w == null ? '—' : (r.est.outOfRange ? '~' : '') + fmtW(Math.max(0, w));
+    $('resUnit').textContent = unitG;
+    if (w != null && r.est.err != null) {
+      const pct = w > 0 ? '±' + Math.round(100 * r.est.err / w) + '%' : '±—';
+      $('resPm').textContent = t('resPm', { e: '±' + fmtW(r.est.err), p: pct });
+      $('resPmNote').textContent = t('resPmNote');
+    } else { $('resPm').textContent = ''; $('resPmNote').textContent = ''; }
+  } else {
+    $('resLabel').textContent = t('resAmpOnly');
+    $('resValue').textContent = fmtA(r.mean);
+    $('resUnit').textContent = unitA;
+    $('resPm').textContent = t('resPmAmp', { e: fmtA(r.sd) });
+    $('resPmNote').textContent = '';
+  }
+  $('resWarnings').replaceChildren(...r.warnings.map(w => alertEl('warn', t(w.k, w.v))));
+  const rows = [];
+  if (r.runW) rows.push([t('resRuns'), iso(r.runW.map(w => fmtW(Math.max(0, w))).join(' · ')) + ' ' + unitG]);
+  rows.push([t('resAmp'), `${fmtA(r.mean)} ${unitA}  ` + iso(`(${r.amps.map(fmtA).join(' · ')})`)]);
+  rows.push([t('resSpread'), (r.cv * 100).toFixed(1) + '%']);
+  rows.push([t('resNoise'), `${fmtA(r.base)} ${unitA}`]);
+  const aliased = r.freq != null && r.fs < 400;
+  if (r.freq != null) rows.push([t('resFreq'), `${r.freq.toFixed(1)} ${t('unitHz')}${aliased ? ' *' : ''}`]);
+  rows.push([t('resSensor'), [t('srcShort_' + r.kind), `${r.fs.toFixed(0)} ${t('unitHz')}`, t('orient_' + r.orient)].map(iso).join(' · ')]);
+  kvRows($('resDetails'), rows);
+  const foot = $('resFoot');
+  foot.hidden = !aliased;
+  foot.textContent = aliased ? t('aliasNote') : '';
+}
+
+function renderCal() {
+  // table
+  const wrap = $('calTable'), fit = currentFit;
+  if (!cal.points.length) {
+    const p = document.createElement('p'); p.className = 'muted'; p.style.margin = '0'; p.textContent = t('calEmpty');
+    wrap.replaceChildren(p);
+  } else {
+    const table = document.createElement('table'); table.className = 'caltable';
+    const thead = document.createElement('thead'), hr = document.createElement('tr');
+    for (const k of ['thWeight', 'thAmp', 'thSpread', 'thFit', null]) { const th = document.createElement('th'); th.textContent = k ? t(k) : ''; hr.appendChild(th); }
+    thead.appendChild(hr); table.appendChild(thead);
+    const tb = document.createElement('tbody');
+    for (const p of cal.points) {
+      const tr = document.createElement('tr');
+      const cv = p.mean > 0 ? p.sd / p.mean : 0;
+      const pred = fit && fit.ok ? MODELS[fit.model].inv(p.mean, fit.p) : null;
+      const cells = [`${fmtW(p.w)} ${t('unitG')}`, fmtA(p.mean), (cv * 100).toFixed(1) + '%', pred == null ? '—' : fmtW(pred)];
+      cells.forEach((txt, i) => { const td = document.createElement('td'); td.textContent = txt; td.dir = i === 0 ? 'auto' : 'ltr'; if (i === 2 && cv > CFG.cvWarn) td.className = 'hi'; tr.appendChild(td); });
+      const td = document.createElement('td'); td.className = 'act';
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'icon-btn'; b.textContent = '×';
+      b.setAttribute('aria-label', `${tp('delPoint')} ${fmtW(p.w)} ${tp('unitG')}`);
+      b.disabled = !!busy;
+      b.addEventListener('click', () => {
+        if (busy || !confirm(tp('delConfirm', { w: fmtW(p.w) }))) return;
+        cal.points = cal.points.filter(q => !sameW(q.w, p.w)); saveCal(); refit(); renderCal(); renderChip();
+      });
+      td.appendChild(b); tr.appendChild(td); tb.appendChild(tr);
+    }
+    table.appendChild(tb);
+    wrap.replaceChildren(table);
+  }
+  // fit summary
+  const sum = $('fitSummary'); sum.replaceChildren();
+  const P = (text, cls) => { const p = document.createElement('p'); p.textContent = text; if (cls) p.className = cls; sum.appendChild(p); return p; };
+  if (!cal.points.length) { /* nothing */ }
+  else if (!fit || !fit.ok) sum.appendChild(alertEl(fit && fit.reason === 'fitNeed' ? 'info' : 'warn', t(fit ? fit.reason : 'fitNeed', { n: fit ? fit.n : 0 })));
+  else {
+    P(t('fitBest', { m: '@m_' + fit.model, r2: fit.r2.toFixed(4) }), 'best');
+    P(t('fitEq'), 'muted small');
+    const pe = document.createElement('p'); const code = document.createElement('code'); code.className = 'eq'; code.textContent = MODELS[fit.model].eq(fit.p); pe.appendChild(code); sum.appendChild(pe);
+    P(t('fitAll') + ' ' + fit.models.map(m => `${t('m_' + m.name)} ${m.r2.toFixed(4)}`).join(' · '), 'muted small');
+    P(t('fitErr', { e: fmtW(fit.rmseW) }));
+    if (fit.increasing) sum.appendChild(alertEl('warn', t('fitIncreasing')));
+    if (new Set(cal.points.map(p => p.orient).filter(Boolean)).size > 1) sum.appendChild(alertEl('warn', t('fitMixed')));
+    if (fit.distinct < 5) sum.appendChild(alertEl('info', t('fitFew')));
+  }
+  drawFit();
+}
+
+function renderSettings() {
+  const opts = {
+    delay: [0, 3, 5, 10].map(v => [v, v ? tp('secS', { s: v }) : t('delayOff')]),
+    duration: [2000, 3000, 4000].map(v => [v, tp('secS', { s: v / 1000 })]),
+    source: ['auto', 'generic', 'devicemotion'].map(v => [v, t('src_' + v)]),
+  };
+  for (const [key, list] of Object.entries(opts)) {
+    const box = document.querySelector(`.seg[data-setting="${key}"]`);
+    box.replaceChildren(...list.map(([v, label]) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', String(settings[key] === v));
+      b.textContent = label; b.disabled = !!busy;
+      b.addEventListener('click', () => {
+        if (busy || settings[key] === v) return;
+        settings[key] = v; saveSettings(); renderSettings();
+        if (key === 'source' && diag) { stopDiag(); startDiag(); }
+      });
+      return b;
+    }));
+  }
+  $('setSound').checked = settings.sound;
+}
+
+function renderDiag() {
+  const yes = t('yes'), no = t('no');
+  const apis = [('Accelerometer' in window) && 'Accelerometer', ('DeviceMotionEvent' in window) && 'DeviceMotion'].filter(Boolean).join(', ') || t('none');
+  kvRows($('diagCaps'), [
+    [t('dSecure'), window.isSecureContext ? yes : no, window.isSecureContext ? 'good' : 'bad'],
+    [t('dVibApi'), typeof navigator.vibrate === 'function' ? yes : no, typeof navigator.vibrate === 'function' ? 'good' : 'bad'],
+    [t('dSensorApi'), apis],
+    [t('dWakeLock'), 'wakeLock' in navigator ? yes : no],
+    [t('dPerm'), t('perm_' + permState), permState === 'denied' ? 'bad' : ''],
+  ]);
+  const btn = $('diagBtn');
+  btn.textContent = diag ? t('diagStop') : t('diagStart');
+  $('diagVibBtn').disabled = !!busy || !!(diag && (diag.vibBusy || diag.starting));
+  btn.disabled = !!busy;
+  const rows = [];
+  if (diag && !diag.starting) {
+    const d = diag, l = d.last;
+    rows.push([t('dSource'), t('srcShort_' + d.kind)]);
+    rows.push([t('dRate'), `${d.times.length} ${t('unitHz')}`]);
+    if (l) {
+      const gn = Math.hypot(l[0], l[1], l[2]);
+      rows.push([t('dAccel'), l.map(v => v.toFixed(2)).join(' / ')]);
+      rows.push([t('dGravity'), `${gn.toFixed(2)} ${t('unitAcc')}`]);
+      rows.push([t('dNoise'), `${fmtA(d.noise)} ${t('unitAcc')}`]);
+      rows.push([t('dOrient'), t(l[2] >= 0 ? 'orient_up' : 'orient_down')]);
+    }
+  }
+  if (diag && diag.vibBusy) rows.push([t('dVibRes'), t('testing')]);
+  else if (diagVib) rows.push([t('dVibRes'), t(diagVib.ok ? 'vibOk' : 'vibBad', { a: fmtA(diagVib.rms), b: fmtA(diagVib.base), r: (diagVib.rms / Math.max(diagVib.base, 1e-4)).toFixed(0) }), diagVib.ok ? 'good' : 'bad']);
+  kvRows($('diagLive'), rows);
+}
+
+/* ---------- canvas drawing ---------- */
+function prep(c) {
+  const w = c.clientWidth, h = c.clientHeight;
+  if (!w || !h) return null;
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const W = Math.round(w * dpr), H = Math.round(h * dpr);
+  if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+  const ctx = c.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.direction = 'ltr';
+  return { ctx, W: w, H: h };
+}
+function placeholder(ctx, W, H, text) {
+  ctx.fillStyle = '#5b6574'; ctx.font = '14px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, W / 2, H / 2);
+}
+function envelope(pts, win) {
+  const out = []; let sum = 0, j = 0;
+  for (let i = 0; i < pts.length; i++) {
+    sum += pts[i][1] * pts[i][1];
+    while (pts[j][0] < pts[i][0] - win) { sum -= pts[j][1] * pts[j][1]; j++; }
+    out.push([pts[i][0], Math.sqrt(Math.max(0, sum) / (i - j + 1))]);
+  }
+  return out;
+}
+function drawTrace(canvas, trs, activeIdx) {
+  const g = prep(canvas); if (!g) return;
+  const { ctx, W, H } = g;
+  if (!trs.length || !trs.some(tr => tr.pts.length > 1)) { placeholder(ctx, W, H, tp('graphEmpty')); return; }
+  const padL = 8, padR = 8, padT = 24, padB = 8, pw = W - padL - padR, ph = H - padT - padB;
+  const ref = trs[activeIdx >= 0 && activeIdx < trs.length ? activeIdx : trs.length - 1];
+  const total = ref.total || 1;
+  let yMax = 0.15;
+  for (const tr of trs) for (const p of tr.pts) if (p[0] > 150 && p[1] > yMax) yMax = p[1];
+  yMax *= 1.08;
+  const X = tm => padL + clamp(tm / total, 0, 1) * pw;
+  const Y = v => padT + ph - clamp(v / yMax, 0, 1) * ph;
+  ctx.strokeStyle = 'rgba(255,255,255,.06)'; ctx.lineWidth = 1;
+  for (let k = 0; k <= 4; k++) { const y = Math.round(padT + ph * k / 4) + 0.5; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke(); }
+  if (ref.tVib) {
+    const v0 = ref.tVib - ref.tStart;
+    ctx.fillStyle = 'rgba(47,209,176,.07)'; ctx.fillRect(X(v0), padT, X(v0 + ref.durMs) - X(v0), ph);
+    ctx.fillStyle = 'rgba(47,209,176,.14)'; ctx.fillRect(X(v0 + CFG.trimMs), padT, X(v0 + ref.durMs - CFG.trimMs) - X(v0 + CFG.trimMs), ph);
+  }
+  const line = (pts, color, width, alpha) => {
+    if (pts.length < 2) return;
+    ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineJoin = 'round';
+    ctx.beginPath(); pts.forEach((p, i) => { const x = X(p[0]), y = Y(p[1]); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.stroke();
+    ctx.globalAlpha = 1;
+  };
+  const focus = activeIdx >= 0 ? activeIdx : -1;
+  trs.forEach((tr, i) => {
+    const isFocus = focus < 0 || i === focus;
+    if (i === (focus >= 0 ? focus : trs.length - 1)) line(tr.pts, '#e9edf3', 1, 0.28);
+    line(envelope(tr.pts, 150), RUN_COLORS[i % RUN_COLORS.length], isFocus ? 2.4 : 1.6, isFocus ? 1 : 0.45);
+    if (tr.rms != null && tr.tVib) {
+      const v0 = tr.tVib - tr.tStart;
+      ctx.setLineDash([5, 4]); ctx.strokeStyle = RUN_COLORS[i % RUN_COLORS.length]; ctx.lineWidth = 1.2; ctx.globalAlpha = 0.9;
+      ctx.beginPath(); ctx.moveTo(X(v0 + CFG.trimMs), Y(tr.rms)); ctx.lineTo(X(v0 + tr.durMs - CFG.trimMs), Y(tr.rms)); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+    }
+  });
+  ctx.font = '12px system-ui, sans-serif'; ctx.textBaseline = 'top'; ctx.fillStyle = '#98a2b3';
+  ctx.textAlign = 'left'; ctx.fillText(`${fmtA(yMax)} m/s²`, padL + 2, 5);
+  const li = focus >= 0 ? focus : trs.length - 1, lt = trs[li];
+  let label = tp('runLabel', { i: li + 1, n: CFG.repeats });
+  if (lt && lt.rms != null) label += `  ·  RMS ${fmtA(lt.rms)}`;
+  ctx.textAlign = 'right'; ctx.direction = lang === 'ar' ? 'rtl' : 'ltr'; ctx.fillStyle = RUN_COLORS[li % RUN_COLORS.length]; ctx.fillText(label, W - padR - 2, 5); ctx.direction = 'ltr';
+}
+
+function niceTicks(max, count) {
+  if (!(max > 0)) max = 1;
+  const raw = max / count, mag = Math.pow(10, Math.floor(Math.log10(raw))), r = raw / mag;
+  const step = (r <= 1 ? 1 : r <= 2 ? 2 : r <= 5 ? 5 : 10) * mag;
+  const top = Math.ceil(max / step - 1e-9) * step, ticks = [];
+  for (let v = 0; v <= top + step * 1e-6; v += step) ticks.push(+v.toPrecision(10));
+  return { ticks, max: top };
+}
+const fmtTick = v => v === 0 ? '0' : Math.abs(v) >= 1 ? String(+v.toFixed(2)) : String(+v.toPrecision(2));
+
+function drawFit() {
+  const g = prep($('fitCanvas')); if (!g) return;
+  const { ctx, W, H } = g, pts = cal.points, fit = currentFit;
+  if (!pts.length) { placeholder(ctx, W, H, tp('fitEmpty')); return; }
+  const padL = 44, padR = 14, padT = 22, padB = 26, pw = W - padL - padR, ph = H - padT - padB;
+  const xT = niceTicks(Math.max(1, ...pts.map(p => p.w)) * 1.05, 4);
+  const est = lastResult && lastResult.est && lastResult.est.w != null ? lastResult : null;
+  const yT = niceTicks(Math.max(...pts.map(p => p.mean + (p.sd || 0)), est ? est.mean : 0) * 1.1, 4);
+  const X = w => padL + clamp(w / xT.max, -0.02, 1.02) * pw, Y = a => padT + ph - (a / yT.max) * ph;
+  ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = '#98a2b3'; ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (const v of yT.ticks) { const y = Math.round(Y(v)) + 0.5; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke(); ctx.fillText(fmtTick(v), padL - 6, y); }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (const v of xT.ticks) ctx.fillText(fmtTick(v), X(v), padT + ph + 6);
+  ctx.textAlign = 'left'; ctx.fillText('m/s²', 4, 4);
+  ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText(tp('unitG'), W - padR, padT + ph - 4);
+  if (fit && fit.ok) {
+    const M = MODELS[fit.model];
+    const seg = (a, b, dashed) => {
+      ctx.setLineDash(dashed ? [4, 4] : []); ctx.strokeStyle = '#2fd1b0'; ctx.lineWidth = dashed ? 1.4 : 2.2; ctx.globalAlpha = dashed ? 0.6 : 1;
+      ctx.beginPath(); let started = false;
+      for (let i = 0; i <= 120; i++) {
+        const x = a + (b - a) * i / 120, y = M.f(x, fit.p);
+        if (!isFinite(y) || y < -yT.max || y > yT.max * 2) { started = false; continue; }
+        const px = X(x), py = clamp(Y(y), padT - 4, padT + ph + 4);
+        if (started) ctx.lineTo(px, py); else { ctx.moveTo(px, py); started = true; }
+      }
+      ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+    };
+    if (fit.wMin > 0) seg(0, fit.wMin, true);
+    seg(fit.wMin, fit.wMax, false);
+    seg(fit.wMax, xT.max, true);
+  }
+  for (const p of pts) {
+    const x = X(p.w);
+    if (p.sd > 0) { ctx.strokeStyle = 'rgba(233,237,243,.55)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x, Y(p.mean - p.sd)); ctx.lineTo(x, Y(p.mean + p.sd)); ctx.stroke(); }
+    ctx.fillStyle = '#e9edf3'; ctx.strokeStyle = '#0d1014'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, Y(p.mean), 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+  if (est) {
+    const x = X(Math.max(0, est.est.w)), y = Y(est.mean);
+    ctx.fillStyle = '#f3b33d'; ctx.strokeStyle = '#0d1014'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, y - 7); ctx.lineTo(x + 7, y); ctx.lineTo(x, y + 7); ctx.lineTo(x - 7, y); ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+}
+
+function activeIdx(area) { return busy && busy.mode === area ? busy.runIdx : -1; }
+function drawAll() {
+  drawTrace($('measCanvas'), traces.measure, activeIdx('measure'));
+  drawTrace($('calCanvas'), traces.cal, activeIdx('cal'));
+  drawFit();
+}
+
+let rafId = 0;
+function loop() {
+  rafId = 0;
+  if (!busy) return;
+  const area = busy.mode;
+  drawTrace($(area === 'measure' ? 'measCanvas' : 'calCanvas'), traces[area], busy.runIdx);
+  if (busy.phase === 'run' || busy.phase === 'pause') {
+    const tr = traces[area][busy.runIdx];
+    const frac = busy.phase === 'pause' ? 1 : (tr && tr.total ? clamp((performance.now() - tr.tStart) / tr.total, 0, 1) : 0);
+    setBar(area, (busy.runIdx + frac) / CFG.repeats);
+  }
+  rafId = requestAnimationFrame(loop);
+}
+function kick() { if (!rafId) rafId = requestAnimationFrame(loop); }
+
+function renderAll() {
+  applyStatic();
+  renderBanners();
+  renderChip();
+  renderSettings();
+  renderMessages();
+  renderResult();
+  renderCal();
+  setBusyUI();
+  requestAnimationFrame(drawAll);
+}
+
+function showTab(name) {
+  currentTab = name;
+  document.querySelectorAll('.tab').forEach(s => s.classList.toggle('active', s.id === 'tab-' + name));
+  document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+  window.scrollTo(0, 0);
+  requestAnimationFrame(drawAll);
+}
+
+/* =====================================================================
+   Import / export
+   ===================================================================== */
+function exportCal() {
+  const data = JSON.stringify({ app: 'VibroScale', exported: new Date().toISOString(), settings, version: cal.version, points: cal.points }, null, 2);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+  a.download = `vibroscale-calibration-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+function importCal(file) {
+  const fr = new FileReader();
+  fr.onload = () => {
+    errors.cal = null; calNote = null;
+    try {
+      const c = sanitizeCal(JSON.parse(fr.result));
+      if (!c || !c.points.length) throw new Error('empty');
+      if (cal.points.length && !confirm(tp('importConfirm'))) return;
+      cal = c; saveCal(); refit();
+      calNote = { kind: 'ok', k: 'importOk' };
+      renderCal(); renderChip();
+    } catch (_) { errors.cal = E('importBad'); }
+    renderMessages();
+  };
+  fr.readAsText(file);
+}
+
+/* =====================================================================
+   Wiring
+   ===================================================================== */
+async function watchPermission() {
+  if (!navigator.permissions || !navigator.permissions.query) return;
+  try {
+    const st = await navigator.permissions.query({ name: 'accelerometer' });
+    const upd = () => { permState = ['granted', 'denied', 'prompt'].includes(st.state) ? st.state : 'unknown'; computeBanners(); renderBanners(); renderDiag(); };
+    st.onchange = upd; upd();
+  } catch (_) { /* not supported */ }
+}
+
+function init() {
+  refit();
+  computeBanners();
+  renderAll();
+  setStatus('measure', 'stIdle');
+  setStatus('cal', 'stIdleCal');
+
+  $('langBtn').addEventListener('click', () => { lang = lang === 'ar' ? 'en' : 'ar'; store.set(KEYS.lang, lang); renderAll(); });
+  document.querySelectorAll('nav.tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+  $('calChip').addEventListener('click', () => showTab('cal'));
+  $('measureBtn').addEventListener('click', () => { if (busy) { if (busy.mode === 'measure') cancelSession(); } else startSession('measure'); });
+  $('calMeasureBtn').addEventListener('click', () => { if (busy) { if (busy.mode === 'cal') cancelSession(); } else startSession('cal'); });
+  $('calWeight').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); if (!busy) startSession('cal'); } });
+  $('calZero').addEventListener('click', () => { $('calWeight').value = '0'; });
+  $('resetBtn').addEventListener('click', () => {
+    if (busy || !cal.points.length || !confirm(tp('resetConfirm'))) return;
+    cal = { version: 1, points: [] }; saveCal(); refit();
+    errors.cal = null; calNote = { kind: 'ok', k: 'resetDone' };
+    renderCal(); renderChip(); renderMessages();
+  });
+  $('exportBtn').addEventListener('click', exportCal);
+  $('importBtn').addEventListener('click', () => $('importFile').click());
+  $('importFile').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; if (f) importCal(f); e.target.value = ''; });
+  $('setSound').addEventListener('change', e => { settings.sound = e.target.checked; saveSettings(); if (settings.sound) unlockAudio(); });
+  $('diagBtn').addEventListener('click', () => { if (diag) stopDiag(); else startDiag(); });
+  $('diagVibBtn').addEventListener('click', testVibration);
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) return;
+    if (busy) busy.ctrl.abort(E('hidden'));
+    stopDiag();
+  });
+  let resizeRaf = 0;
+  window.addEventListener('resize', () => { if (!resizeRaf) resizeRaf = requestAnimationFrame(() => { resizeRaf = 0; drawAll(); }); });
+  watchPermission();
+}
+
+// Exposed for debugging from the console / automated tests.
+window.VibroScale = { CFG, MODELS, fitCalibration, estimateWeight, analyzeRun, parseWeight, get calibration() { return cal; }, get fit() { return currentFit; }, get lastResult() { return lastResult; } };
+
+init();
+})();
+</script>
+</body>
+</html>

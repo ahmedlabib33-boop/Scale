@@ -285,13 +285,8 @@ body.ov-open{overflow:hidden}
     </div>
     <div id="resWarnings"></div>
     <div id="measMsg"></div>
-    <div id="setupCard" class="card setup mt" hidden>
-      <h2 id="setupH"></h2>
-      <p id="setupP"></p>
-      <button id="setupBtn" class="btn primary huge" type="button"></button>
-    </div>
     <button id="measureBtn" class="btn primary huge mt" type="button"></button>
-    <p id="measHint" class="hint center" data-i18n="measHint"></p>
+    <p id="measHint" class="hint center"></p>
     <div id="measStatus" class="statusline" role="status" aria-live="polite"></div>
     <details class="card more" id="measDetails">
       <summary data-i18n="detailsSummary"></summary>
@@ -388,6 +383,14 @@ body.ov-open{overflow:hidden}
           <div class="seg stack" role="radiogroup" aria-labelledby="lblSrc" data-setting="source"></div>
           <p class="hint" data-i18n="setHint"></p>
         </div>
+        <div class="setting">
+          <label class="lbl" for="setMass" data-i18n="setMass"></label>
+          <div class="other" style="margin-top:0">
+            <input id="setMass" class="inp" type="text" inputmode="decimal" autocomplete="off" dir="ltr">
+            <span data-i18n="unitG"></span>
+          </div>
+          <p class="hint" data-i18n="setMassHint"></p>
+        </div>
         <div class="setting switch-row">
           <label for="setSound" data-i18n="setSound"></label>
           <span class="switch"><input id="setSound" type="checkbox"><span></span></span>
@@ -467,7 +470,10 @@ const IS_IPHONE = /iPhone/.test(UA);   // only iPhones have a Taptic Engine (iPa
 const IOS_MAJOR = (() => { const m = UA.match(/OS (\d+)[_.]\d+(?:[_.]\d+)? like Mac OS X/); return m ? +m[1] : null; })();
 // How the phone is shaken: the vibration motor, rapid haptic taps (iPhone), or nothing available.
 const EXC = typeof navigator.vibrate === 'function' ? 'motor' : IS_IPHONE ? 'taps' : null;
-const DEFAULT_SETTINGS = { duration: EXC === 'taps' ? 4000 : 2000, delay: 5, source: 'auto', sound: true };
+// Quick set-up (no known weights): vibration strength ≈ A0 / (1 + w / M), with M ≈ the phone's own mass.
+const PHONE_MASS_DEFAULT = 193;   // Infinix Hot 60 5G, per its spec sheet
+const QUICK_WMAX = 500;           // range the quick set-up is trusted for (g)
+const DEFAULT_SETTINGS = { duration: EXC === 'taps' ? 4000 : 2000, delay: 5, source: 'auto', sound: true, phoneMass: PHONE_MASS_DEFAULT };
 const RUN_COLORS = ['#2fd1b0', '#8ab4ff', '#f3b33d'];
 
 /* =====================================================================
@@ -477,12 +483,12 @@ const I18N = {
 en: {
   appName: 'VibroScale', langBtn: 'العربية',
   tabMeasure: 'Weigh', tabCal: 'Calibrate', tabHelp: 'Help',
-  measureBtn: 'Weigh', measureRawBtn: 'Measure vibration only', cancelBtn: 'Cancel',
+  measureBtn: 'Weigh', cancelBtn: 'Cancel',
   measHint: 'Tap Weigh, put the object on the phone, then take your hand away.',
-  setupTitle: 'First, set up the scale',
-  setupText: 'Measure 3 things whose weight you know — for example nothing, a few coins and a small sealed bag of sugar. It takes about 3 minutes, and you only do it once.',
-  setupBtn: 'Set up the scale',
-  setupContTitle: 'Finish setting up the scale', setupContText: '{n} of 3 known weights done. Measure the rest to start weighing.', setupContBtn: 'Continue set-up',
+  measHintFirst: 'First time? The app checks the empty phone by itself (about 15 seconds), then asks you to put the object on.',
+  chipAuto: 'Sets itself up on the first weigh · calibrate for better accuracy',
+  chipQuick: 'Quick set-up (rough) · calibrate for better accuracy',
+  chipBasic: 'Set up with 1 known weight · add more for better accuracy',
   chipReady: 'Set up with {n} weights · change',
   resTitle: 'Weight', resAmpOnly: 'Vibration strength (scale not set up)',
   resPm: '{e} g ({p})',
@@ -498,13 +504,13 @@ en: {
   srcShort_generic: 'Accelerometer API', srcShort_devicemotion: 'DeviceMotion',
   exc_motor: 'motor (Vibration API)', exc_taps: 'haptic taps (iPhone, experimental)',
   /* step-by-step guide */
-  ovStepWeigh: 'Weighing', ovStepCal: 'Calibrating with {w} g', ovStepCalEmpty: 'Calibrating with an empty phone',
+  ovStepWeigh: 'Weighing', ovAutoStep1: 'Step 1 of 2 · checking the empty phone', ovAutoStep2: 'Step 2 of 2 · weighing', ovStepCal: 'Calibrating with {w} g', ovStepCalEmpty: 'Calibrating with an empty phone',
   ovReady: 'Getting ready…',
   ovPutObject: 'Put the object on the phone', ovPutWeight: 'Put the {w} g weight on the phone', ovEmpty: 'Take everything off the phone',
   ovLetGo: 'then take your hand away',
   ovHandsOff: 'Hands off', ovStill: 'Waiting until the phone is still…',
   ovMeasuring: 'Measuring — don’t touch', ovKeepStill: 'Keep the table still too',
-  stDone: 'Done.', stCancelled: 'Cancelled.',
+  stCancelled: 'Cancelled.',
   /* result details */
   resRuns: 'Each reading', resAmp: 'Vibration strength', resSpread: 'Difference between readings', resNoise: 'Background noise',
   resFreq: 'Dominant frequency', resSensor: 'Sensor', resConf: '± range',
@@ -521,6 +527,9 @@ en: {
   wRate: 'The sensor speed changed since calibration ({cal} → {now} Hz). If results look wrong, calibrate again.',
   wDur: 'The vibration length ({now} s) is different from calibration ({cal} s).',
   wNoCal: 'The scale isn’t set up, so this is only the vibration strength, not grams.',
+  wQuick: 'Quick set-up: the app assumes your phone weighs {m} g. For better accuracy, calibrate with 1–2 known weights (Calibrate tab).',
+  wBasic: 'Calibrated with only 1 known weight. Add another one for better accuracy.',
+  wOutOfRangeQuick: 'Heavier than the quick set-up can estimate (about {max} g). Calibrate with a weight close to this one.',
   wExc: 'This calibration was made with {a}, but this device uses {b}. Calibrate again on this device.',
   wFewSamples: 'Few sensor readings ({fs} Hz). A longer vibration (Help → Settings) helps.',
   /* errors */
@@ -546,8 +555,8 @@ en: {
   calTitle: 'Calibrate the scale',
   calSteps: '{n} of 3 done', calStepsReady: 'Ready — {n} weights',
   guide0: 'Start with nothing on the phone. Lay it flat (screen down is best) and tap the button.',
-  guide1: 'Now use something whose weight you know — coins or a small sealed bag of sugar. Choose its weight below.',
-  guide2: 'One more known weight, different from the others.',
+  guide1: 'The scale already works roughly. For better accuracy, add something whose weight you know — coins or a small sealed bag of sugar — and choose its weight below.',
+  guide2: 'One more known weight, different from the others, for the best accuracy.',
   guideReady: '✓ The scale is ready — go and weigh something! More weights make it more accurate.',
   calWeightLabel: 'Weight you will put on the phone',
   calZero: 'Empty', calOther: 'Other weight:',
@@ -566,6 +575,7 @@ en: {
   fitFlat: 'The vibration doesn’t change with weight, so the scale can’t be set up. Check that the phone vibrates (Help → Phone check) and that the weights sit firmly on it.',
   fitNoModel: 'No curve fits these weights. Measure the unsteady ones again.',
   fitBest: 'Best model: {m} — R² = {r2}',
+  fitQuick: 'Quick set-up from the empty phone only (assumes the phone weighs {m} g).', fitBasic: 'Set up from the empty phone and 1 known weight.',
   fitEq: 'Equation (A in m/s², w in g):',
   fitAll: 'All models (R²):',
   fitErr: 'Typical error on your weights: ±{e} g',
@@ -586,9 +596,9 @@ en: {
   /* help */
   helpTitle: 'How to use',
   helpHtml: `<ol>
-<li><b>Set up once</b> on the Calibrate tab: measure 3 things whose weight you know.</li>
-<li><b>Weigh:</b> tap Weigh, put the object on the phone and take your hand away.</li>
+<li><b>Weigh:</b> tap Weigh, put the object on the phone and take your hand away. The first time, the app checks the empty phone by itself first.</li>
 <li>Don’t touch the phone or the table until you hear the beep.</li>
+<li><b>Better accuracy:</b> on the Calibrate tab, measure 1–3 things whose weight you know. Without them the result is a rough estimate.</li>
 </ol>
 <p class="muted small">Tips: lay the phone screen-down on a firm table, put things on the same spot every time, and keep the same phone case. Works best for about 20–500 g.</p>`,
   diagTitle: 'Phone check', diagIntro: 'Checks that this phone can vibrate and feel it. Keep the phone empty and tap Test vibration.',
@@ -605,6 +615,7 @@ en: {
   setDuration: 'Vibration length',
   setSource: 'Sensor source', setHint: 'Keep these the same for calibrating and weighing.',
   setSound: 'Beep when finished',
+  setMass: 'Phone weight (with case)', setMassHint: 'Used until you calibrate with known weights. Infinix Hot 60 5G: 193 g — add your case’s weight if you use one.',
   secS: '{s} s', delayOff: 'None',
   howTitle: 'How it works',
   howHtml: `<p>The vibration motor shakes the phone with a roughly constant force. The heavier the load on the phone, the less it moves, so the accelerometer sees a smaller vibration.</p>
@@ -615,12 +626,12 @@ en: {
 ar: {
   appName: 'ميزان الاهتزاز', langBtn: 'English',
   tabMeasure: 'الوزن', tabCal: 'المعايرة', tabHelp: 'مساعدة',
-  measureBtn: 'ابدأ الوزن', measureRawBtn: 'قياس الاهتزاز فقط', cancelBtn: 'إلغاء',
+  measureBtn: 'ابدأ الوزن', cancelBtn: 'إلغاء',
   measHint: 'اضغط «ابدأ الوزن»، ثم ضع الجسم على الهاتف وارفع يدك.',
-  setupTitle: 'أولًا، جهّز الميزان',
-  setupText: 'قِس 3 أشياء تعرف وزنها — مثلًا لا شيء، وبعض العملات المعدنية، وكيس سكر صغير مغلق. يستغرق ذلك نحو 3 دقائق، ومرة واحدة فقط.',
-  setupBtn: 'جهّز الميزان',
-  setupContTitle: 'أكمل تجهيز الميزان', setupContText: 'تم {n} من 3 أوزان معروفة. أكمل الباقي لتبدأ الوزن.', setupContBtn: 'متابعة التجهيز',
+  measHintFirst: 'أول مرة؟ يفحص التطبيق الهاتف فارغًا بنفسه (حوالي 15 ثانية)، ثم يطلب منك وضع الجسم.',
+  chipAuto: 'يجهّز نفسه عند أول وزن · عايِر لدقة أفضل',
+  chipQuick: 'تجهيز سريع (تقريبي) · عايِر لدقة أفضل',
+  chipBasic: 'مُجهّز بوزن معروف واحد · أضف المزيد لدقة أفضل',
   chipReady: 'مُجهّز بـ {n} أوزان · تغيير',
   resTitle: 'الوزن', resAmpOnly: 'شدة الاهتزاز (الميزان غير مُجهّز)',
   resPm: '{e} جم ({p})',
@@ -635,13 +646,13 @@ ar: {
   src_auto: 'تلقائي (موصى به)', src_generic: 'Accelerometer (واجهة المستشعرات العامة)', src_devicemotion: 'حدث DeviceMotion',
   srcShort_generic: 'Accelerometer', srcShort_devicemotion: 'DeviceMotion',
   exc_motor: 'المحرك (Vibration API)', exc_taps: 'نقرات لمسية (آيفون، تجريبي)',
-  ovStepWeigh: 'جارٍ الوزن', ovStepCal: 'معايرة بوزن {w} جم', ovStepCalEmpty: 'معايرة والهاتف فارغ',
+  ovStepWeigh: 'جارٍ الوزن', ovAutoStep1: 'الخطوة 1 من 2 · فحص الهاتف فارغًا', ovAutoStep2: 'الخطوة 2 من 2 · الوزن', ovStepCal: 'معايرة بوزن {w} جم', ovStepCalEmpty: 'معايرة والهاتف فارغ',
   ovReady: 'جارٍ التحضير…',
   ovPutObject: 'ضع الجسم على الهاتف', ovPutWeight: 'ضع وزن {w} جم على الهاتف', ovEmpty: 'أزِل كل شيء من على الهاتف',
   ovLetGo: 'ثم ارفع يدك',
   ovHandsOff: 'ارفع يدك', ovStill: 'بانتظار ثبات الهاتف…',
   ovMeasuring: 'جارٍ القياس — لا تلمس', ovKeepStill: 'وحافظ على ثبات الطاولة أيضًا',
-  stDone: 'تم.', stCancelled: 'تم الإلغاء.',
+  stCancelled: 'تم الإلغاء.',
   resRuns: 'كل قراءة', resAmp: 'شدة الاهتزاز', resSpread: 'الفرق بين القراءات', resNoise: 'الضوضاء الخلفية',
   resFreq: 'التردد السائد', resSensor: 'المستشعر', resConf: 'نطاق ±',
   resConfVal: 'احتمال ≈95% أن الوزن الحقيقي داخله',
@@ -656,6 +667,9 @@ ar: {
   wRate: 'تغيرت سرعة المستشعر منذ المعايرة ({cal} ← {now} هرتز). إذا بدت النتائج خاطئة فأعد المعايرة.',
   wDur: 'مدة الاهتزاز ({now} ث) تختلف عن المعايرة ({cal} ث).',
   wNoCal: 'الميزان غير مُجهّز، لذا هذه شدة الاهتزاز فقط وليست جرامات.',
+  wQuick: 'تجهيز سريع: يفترض التطبيق أن وزن هاتفك {m} جم. لدقة أفضل، عايِر بوزن أو وزنين معروفين (تبويب المعايرة).',
+  wBasic: 'تمت المعايرة بوزن معروف واحد فقط. أضف وزنًا آخر لدقة أفضل.',
+  wOutOfRangeQuick: 'أثقل مما يستطيع التجهيز السريع تقديره (حوالي {max} جم). عايِر بوزن قريب من هذا الوزن.',
   wExc: 'هذه المعايرة أُجريت باستخدام {a}، لكن هذا الجهاز يستخدم {b}. أعد المعايرة على هذا الجهاز.',
   wFewSamples: 'قراءات المستشعر قليلة ({fs} هرتز). مدة اهتزاز أطول (مساعدة ← الإعدادات) تساعد.',
   noVibration: 'لم يهتز الهاتف (أو أن الجسم ثقيل جدًا). فعّل الاهتزاز من إعدادات أندرويد ← الصوت والاهتزاز، وأوقف «عدم الإزعاج» وموفر البطارية، ثم أعد المحاولة.',
@@ -679,8 +693,8 @@ ar: {
   calTitle: 'معايرة الميزان',
   calSteps: 'تم {n} من 3', calStepsReady: 'جاهز — {n} أوزان',
   guide0: 'ابدأ والهاتف فارغ. ضعه مستويًا (والشاشة لأسفل أفضل) ثم اضغط الزر.',
-  guide1: 'الآن استخدم شيئًا تعرف وزنه — عملات معدنية أو كيس سكر صغير مغلق — واختر وزنه بالأسفل.',
-  guide2: 'وزن معروف آخر، مختلف عن السابق.',
+  guide1: 'الميزان يعمل الآن بشكل تقريبي. لدقة أفضل، أضف شيئًا تعرف وزنه — عملات معدنية أو كيس سكر صغير مغلق — واختر وزنه بالأسفل.',
+  guide2: 'وزن معروف آخر، مختلف عن السابق، لأفضل دقة.',
   guideReady: '✓ الميزان جاهز — اذهب وزِن شيئًا! كل وزن إضافي يزيد الدقة.',
   calWeightLabel: 'الوزن الذي ستضعه على الهاتف',
   calZero: 'فارغ', calOther: 'وزن آخر:',
@@ -699,6 +713,7 @@ ar: {
   fitFlat: 'الاهتزاز لا يتغير مع الوزن، لذلك لا يمكن تجهيز الميزان. تأكد أن الهاتف يهتز («فحص الهاتف» في المساعدة) وأن الأوزان ثابتة عليه.',
   fitNoModel: 'لا يوجد منحنى مناسب لهذه الأوزان. أعد قياس الأوزان غير المستقرة.',
   fitBest: 'أفضل نموذج: {m} — R² = {r2}',
+  fitQuick: 'تجهيز سريع من الهاتف الفارغ فقط (بافتراض أن وزن الهاتف {m} جم).', fitBasic: 'مُجهّز من الهاتف الفارغ ووزن معروف واحد.',
   fitEq: 'المعادلة (A بوحدة م/ث²، w بالجرام):',
   fitAll: 'كل النماذج (R²):',
   fitErr: 'الخطأ المعتاد على أوزانك: ±{e} جم',
@@ -718,9 +733,9 @@ ar: {
 </ul>`,
   helpTitle: 'طريقة الاستخدام',
   helpHtml: `<ol>
-<li><b>جهّز الميزان مرة واحدة</b> من تبويب «المعايرة»: قِس 3 أشياء تعرف وزنها.</li>
-<li><b>الوزن:</b> اضغط «ابدأ الوزن»، ثم ضع الجسم على الهاتف وارفع يدك.</li>
+<li><b>الوزن:</b> اضغط «ابدأ الوزن»، ثم ضع الجسم على الهاتف وارفع يدك. في المرة الأولى يفحص التطبيق الهاتف فارغًا بنفسه أولًا.</li>
 <li>لا تلمس الهاتف أو الطاولة حتى تسمع الصفارة.</li>
+<li><b>لدقة أفضل:</b> من تبويب «المعايرة» قِس من 1 إلى 3 أشياء تعرف وزنها. بدونها تكون النتيجة تقديرًا تقريبيًا.</li>
 </ol>
 <p class="muted small">نصائح: ضع الهاتف والشاشة لأسفل على طاولة صلبة، وضع الأشياء في المكان نفسه كل مرة، واستخدم غطاء الهاتف نفسه. يعمل بشكل أفضل بين 20 و500 جم تقريبًا.</p>`,
   diagTitle: 'فحص الهاتف', diagIntro: 'يتحقق من أن هذا الهاتف يستطيع الاهتزاز والإحساس به. اترك الهاتف فارغًا واضغط «اختبار الاهتزاز».',
@@ -737,6 +752,7 @@ ar: {
   setDuration: 'مدة الاهتزاز',
   setSource: 'مصدر المستشعر', setHint: 'حافظ على نفس الإعدادات أثناء المعايرة والوزن.',
   setSound: 'صفارة عند الانتهاء',
+  setMass: 'وزن الهاتف (مع الغطاء)', setMassHint: 'يُستخدم حتى تعاير بأوزان معروفة. Infinix Hot 60 5G: ‏193 جم — أضف وزن الغطاء إن كنت تستخدمه.',
   secS: '{s} ث', delayOff: 'بدون',
   howTitle: 'كيف يعمل',
   howHtml: `<p>يهز محرك الاهتزاز الهاتف بقوة ثابتة تقريبًا. كلما زاد الحمل على الهاتف قلّت حركته، فيقيس مقياس التسارع اهتزازًا أضعف.</p>
@@ -826,6 +842,7 @@ function loadSettings() {
   if (![0, 3, 5, 10].includes(s.delay)) s.delay = DEFAULT_SETTINGS.delay;
   if (!['auto', 'generic', 'devicemotion'].includes(s.source) || !sourceAvailable(s.source)) s.source = 'auto';
   s.sound = s.sound !== false;
+  if (!(typeof s.phoneMass === 'number' && s.phoneMass >= 50 && s.phoneMass <= 1000)) s.phoneMass = PHONE_MASS_DEFAULT;
   return s;
 }
 const saveSettings = () => store.set(KEYS.settings, settings);
@@ -1094,10 +1111,20 @@ function refineLM(M, xs, ys, p0, lo, hi) {
   return p;
 }
 
-function fitCalibration(points) {
+function fitCalibration(points, phoneMass = PHONE_MASS_DEFAULT) {
   const pts = points.filter(p => p.mean > 0 && isFinite(p.w));
   const distinct = new Set(pts.map(p => p.w)).size;
-  if (distinct < 3) return { ok: false, reason: 'fitNeed', n: distinct };
+  if (distinct < 3) {
+    // Fewer than 3 known weights: fall back on physics. A free mass driven by a constant force moves with
+    // A = A0 / (1 + w / M), M ≈ the phone's mass. Needs the empty-phone reading (A0).
+    const e = pts.find(p => sameW(p.w, 0));
+    if (!e) return { ok: false, reason: 'fitNeed', n: distinct };
+    const A0 = e.mean, other = pts.find(p => !sameW(p.w, 0));
+    const base = { ok: true, n: pts.length, distinct, model: 'inverse', r2: null, rmseW: null, models: [], sA: Math.max(e.sd || 0, 0.01 * A0), wMin: 0, increasing: false };
+    if (!other) return Object.assign(base, { level: 'quick', p: [1 / A0, 1 / (A0 * phoneMass)], mass: phoneMass, wMax: QUICK_WMAX, aMax: A0, aMin: A0 / (1 + QUICK_WMAX / phoneMass), relErr: 0.30 });
+    if (!(other.mean < A0)) return { ok: false, reason: 'fitFlat', n: distinct };
+    return Object.assign(base, { level: 'basic', p: [1 / A0, (1 / other.mean - 1 / A0) / other.w], wMax: other.w, aMax: A0, aMin: other.mean, relErr: 0.15 });
+  }
   const xs = pts.map(p => p.w), ys = pts.map(p => p.mean), n = pts.length;
   const lo = Math.min(...xs), hi = Math.max(...xs);
   const ym = mean(ys), sst = ys.reduce((s, y) => s + (y - ym) ** 2, 0);
@@ -1124,7 +1151,7 @@ function fitCalibration(points) {
   const wRes = pts.map(pt => M.inv(pt.mean, best.p) - pt.w);
   const rmseW = Math.sqrt(wRes.reduce((s, r) => s + r * r, 0) / dof);
   return {
-    ok: true, n, distinct, model: best.name, p: best.p, r2: best.r2, sA, rmseW, models,
+    ok: true, level: 'full', n, distinct, model: best.name, p: best.p, r2: best.r2, sA, rmseW, models,
     wMin: lo, wMax: hi, aMin: Math.min(...ys), aMax: Math.max(...ys), increasing: M.dfdx(lo, best.p) > 0,
   };
 }
@@ -1142,6 +1169,7 @@ function estimateWeight(fit, amp, sem) {
   const sigA = Math.sqrt(Math.max(fit.sA * fit.sA, sem * sem) + fit.sA * fit.sA / fit.n);
   let err = slope > 0 ? 2 * sigA / slope : null;
   if (err != null && !isFinite(err)) err = null;
+  if (fit.relErr) err = Math.max(err || 0, fit.relErr * Math.max(w, 5));   // quick / basic set-up: model uncertainty dominates
   return { w, err, outOfRange };
 }
 
@@ -1413,33 +1441,42 @@ async function startSession(area) {
     const kind = await hub.start(settings.source);
     if (ctrl.signal.aborted) throw abortErr(ctrl.signal);   // cancelled while the sensor was starting
     acquireWakeLock();
-    busy.phase = 'countdown';
-    for (let s = settings.delay; s > 0; s--) {
-      setStatus(area, 'stCountdown', { s });
-      beep('tick');
-      await wait(1000, ctrl.signal);
-    }
-    busy.phase = 'still';
-    setStatus(area, 'stStill');
-    const still = await waitForStill(ctrl.signal);
-    const runs = [];
-    for (let i = 0; i < CFG.repeats; i++) {
-      busy.phase = 'run'; busy.runIdx = i;
-      const trace = { pts: [], tStart: performance.now(), tVib: 0, durMs: settings.duration, total: 1, rms: null };
-      traces[area].push(trace);
-      setStatus(area, 'stRun', { i: i + 1, n: CFG.repeats });
-      const rec = await record({ baselineMs: CFG.baselineMs, durMs: settings.duration, postMs: CFG.postMs, signal: ctrl.signal, trace });
-      const r = analyzeRun(rec);
-      trace.rms = r.rms;
-      runs.push(r);
-      if (i < CFG.repeats - 1) {
-        busy.phase = 'pause';
-        setStatus(area, 'stPause', { i: i + 1, n: CFG.repeats });
-        await wait(CFG.pauseMs, ctrl.signal);
+    const measureOnce = async () => {
+      busy.phase = 'countdown'; busy.runIdx = -1; traces[area] = [];
+      for (let s = settings.delay; s > 0; s--) {
+        setStatus(area, 'stCountdown', { s });
+        beep('tick');
+        await wait(1000, ctrl.signal);
       }
+      busy.phase = 'still';
+      setStatus(area, 'stStill');
+      const still = await waitForStill(ctrl.signal);
+      const runs = [];
+      for (let i = 0; i < CFG.repeats; i++) {
+        busy.phase = 'run'; busy.runIdx = i;
+        const trace = { pts: [], tStart: performance.now(), tVib: 0, durMs: settings.duration, total: 1, rms: null };
+        traces[area].push(trace);
+        setStatus(area, 'stRun', { i: i + 1, n: CFG.repeats });
+        const rec = await record({ baselineMs: CFG.baselineMs, durMs: settings.duration, postMs: CFG.postMs, signal: ctrl.signal, trace });
+        const r = analyzeRun(rec);
+        trace.rms = r.rms;
+        runs.push(r);
+        if (i < CFG.repeats - 1) {
+          busy.phase = 'pause';
+          setStatus(area, 'stPause', { i: i + 1, n: CFG.repeats });
+          await wait(CFG.pauseMs, ctrl.signal);
+        }
+      }
+      busy.phase = 'done';
+      return summarizeRuns(runs, still, kind);
+    };
+    if (area === 'measure' && needsEmpty()) {
+      // First weigh ever: measure the empty phone (step 1 of 2), keep it as the 0 g point, then weigh.
+      Object.assign(busy, { auto: true, step: 1, steps: 2, weight: 0 });
+      finishCal(await measureOnce(), 0);
+      Object.assign(busy, { step: 2, weight: null });
     }
-    busy.phase = 'done';
-    const res = summarizeRuns(runs, still, kind);
+    const res = await measureOnce();
     if (area === 'measure') finishMeasure(res); else finishCal(res, weight);
     setStatus(area, null);   // the result / saved note says it all
     setBar(area, 1);
@@ -1493,7 +1530,10 @@ function finishMeasure(res) {
     const M = MODELS[fit.model];
     out.est = estimateWeight(fit, res.mean, res.sem);
     out.runW = res.used.map(r => M.inv(r.rms, fit.p));
-    if (out.est.outOfRange) out.warnings.unshift({ k: 'wOutOfRange', v: { range: `${fmtW(fit.wMin)}–${fmtW(fit.wMax)}` } });
+    out.level = fit.level;
+    if (out.est.outOfRange) out.warnings.unshift(fit.level === 'quick' ? { k: 'wOutOfRangeQuick', v: { max: fmtW(fit.wMax) } } : { k: 'wOutOfRange', v: { range: `${fmtW(fit.wMin)}–${fmtW(fit.wMax)}` } });
+    if (fit.level === 'quick') out.warnings.push({ k: 'wQuick', kind: 'info', v: { m: fmtW(fit.mass) } });
+    else if (fit.level === 'basic') out.warnings.push({ k: 'wBasic', kind: 'info' });
     const cm = calMeta();
     if (cm.exc && cm.exc !== EXC) out.warnings.push({ k: 'wExc', v: { a: '@exc_' + cm.exc, b: '@exc_' + EXC } });
     if (cm.orient && res.orient && cm.orient !== res.orient) out.warnings.push({ k: 'wOrient', v: { a: '@orient_' + cm.orient, b: '@orient_' + res.orient } });
@@ -1525,7 +1565,9 @@ function finishCal(res, weight) {
   renderMessages();
 }
 
-function refit() { currentFit = fitCalibration(cal.points); }
+function refit() { currentFit = fitCalibration(cal.points, settings.phoneMass); }
+// Weigh measures the empty phone first when nothing else can turn vibration into grams.
+const needsEmpty = () => !(currentFit && currentFit.ok) && !cal.points.some(p => sameW(p.w, 0));
 
 /* =====================================================================
    Wake lock & sound
@@ -1673,20 +1715,11 @@ function preselectNextWeight() { const s = suggestNextWeight(); $('calWeight').v
 
 // Weigh tab: status line under the display, and "set up first" vs "Weigh" depending on calibration.
 function renderChip() {
-  const chip = $('calChip'), fit = currentFit, ready = calReady();
-  chip.hidden = !ready;   // when not set up, the set-up card below says it (once)
-  if (ready) chip.textContent = t('chipReady', { n: fit.distinct });
-  $('setupCard').hidden = ready;
-  if (!ready) {
-    const started = cal.points.length > 0, n = fit ? fit.n : 0;
-    $('setupH').textContent = t(started ? 'setupContTitle' : 'setupTitle');
-    $('setupP').textContent = !started ? t('setupText') : n >= 3 && fit && fit.reason !== 'fitNeed' ? t(fit.reason, { n }) : t('setupContText', { n: Math.min(n, 3) });
-    $('setupBtn').textContent = t(started ? 'setupContBtn' : 'setupBtn');
-  }
-  const mb = $('measureBtn');
-  mb.className = ready ? 'btn primary huge mt' : 'btn link mt';
-  mb.textContent = ready ? t('measureBtn') : t('measureRawBtn');
-  $('measHint').hidden = !ready;
+  const chip = $('calChip'), fit = currentFit, level = calReady() ? fit.level : null;
+  chip.className = level === 'full' ? 'chip-link' : 'chip-link warn';
+  chip.textContent = level === 'full' ? t('chipReady', { n: fit.distinct }) : level === 'basic' ? t('chipBasic') : level === 'quick' ? t('chipQuick') : t('chipAuto');
+  $('measureBtn').textContent = t('measureBtn');
+  $('measHint').textContent = needsEmpty() ? t('measHintFirst') : t('measHint');
 }
 
 function setStatus(area, k, v) { statuses[area] = k ? { k, v } : null; renderStatus(area); }
@@ -1704,10 +1737,11 @@ function renderOverlay() {
   const firstShow = ov.hidden;
   ov.hidden = false; document.body.classList.add('ov-open');
   const area = busy.mode, w = busy.weight, s = statuses[area] || {}, v = s.v || {};
-  $('ovStep').textContent = area === 'measure' ? t('ovStepWeigh') : w === 0 ? t('ovStepCalEmpty') : t('ovStepCal', { w: fmtW(w) });
+  $('ovStep').textContent = busy.auto ? t(busy.step === 1 ? 'ovAutoStep1' : 'ovAutoStep2')
+    : area === 'measure' ? t('ovStepWeigh') : w === 0 ? t('ovStepCalEmpty') : t('ovStepCal', { w: fmtW(w) });
   let title = t('ovReady'), big = '', sub = '', graph = false;
   if (s.k === 'stCountdown') {
-    title = area === 'measure' ? t('ovPutObject') : w === 0 ? t('ovEmpty') : t('ovPutWeight', { w: fmtW(w) });
+    title = w === 0 ? t('ovEmpty') : area === 'measure' ? t('ovPutObject') : t('ovPutWeight', { w: fmtW(w) });
     big = String(v.s); sub = t('ovLetGo');
   } else if (s.k === 'stStill') { title = t('ovHandsOff'); sub = t('ovStill'); }
   else if (s.k === 'stRun' || s.k === 'stPause') { title = t('ovMeasuring'); big = `${v.i}/${v.n}`; sub = t('ovKeepStill'); graph = true; }
@@ -1732,7 +1766,7 @@ function renderMessages() {
 function setBusyUI() {
   document.body.toggleAttribute('data-busy', !!busy);
   const locked = !!busy || vibTesting;
-  for (const id of ['measureBtn', 'calMeasureBtn', 'setupBtn', 'goWeighBtn', 'calWeight', 'resetBtn', 'importBtn', 'exportBtn', 'setSound']) $(id).disabled = locked;
+  for (const id of ['measureBtn', 'calMeasureBtn', 'goWeighBtn', 'setMass', 'calWeight', 'resetBtn', 'importBtn', 'exportBtn', 'setSound']) $(id).disabled = locked;
   document.querySelectorAll('.seg button').forEach(b => { b.disabled = locked || b.dataset.na === '1'; });
   document.querySelectorAll('.caltable .icon-btn, .pt-list .icon-btn, .chips button').forEach(b => { b.disabled = locked; });
   renderOverlay();
@@ -1740,8 +1774,8 @@ function setBusyUI() {
   renderDiag();
 }
 
-function qualityOf(est) {
-  if (est.outOfRange) return 'out';
+function qualityOf(est, level) {
+  if (est.outOfRange) return level === 'quick' ? 'rough' : 'out';
   if (est.w == null || est.err == null) return 'rough';
   const rel = est.err / Math.max(est.w, 1);
   return rel <= 0.06 ? 'good' : rel <= 0.15 ? 'ok' : 'rough';
@@ -1766,13 +1800,13 @@ function renderResult() {
     $('resUnit').textContent = unitG;
     $('resPm').textContent = (w != null && r.est.err != null)
       ? t('resPm', { e: '±' + fmtW(r.est.err), p: w > 0 ? '±' + Math.round(100 * r.est.err / w) + '%' : '±—' }) : '';
-    const q = qualityOf(r.est);
+    const q = qualityOf(r.est, r.level);
     badge.hidden = false; badge.className = 'badge ' + q; badge.textContent = t('q_' + q);
   } else {
     $('resLabel').textContent = t('resAmpOnly');
     val.textContent = fmtA(r.mean); $('resUnit').textContent = unitA; $('resPm').textContent = '';
   }
-  $('resWarnings').replaceChildren(...r.warnings.map(w => alertEl('warn', t(w.k, w.v))));
+  $('resWarnings').replaceChildren(...r.warnings.map(w => alertEl(w.kind || 'warn', t(w.k, w.v))));
   const rows = [];
   if (r.runW) rows.push([t('resRuns'), iso(r.runW.map(w => fmtW(Math.max(0, w))).join(' · ')) + ' ' + unitG]);
   if (r.est && r.est.err != null) rows.push([t('resConf'), t('resConfVal')]);
@@ -1819,16 +1853,17 @@ function delButton(w) {
 }
 
 function renderCal() {
-  const fit = currentFit, ready = calReady();
+  const fit = currentFit, ready = calReady(), full = ready && fit.level === 'full';
   const n = new Set(cal.points.map(p => p.w)).size;
   // progress + one instruction at a time
   [...$('calBar3').children].forEach((el, i) => el.classList.toggle('on', i < Math.min(n, 3)));
-  $('calStepsText').textContent = ready ? t('calStepsReady', { n }) : t('calSteps', { n: Math.min(n, 3) });
-  $('calGuide').textContent = ready ? t('guideReady')
+  $('calStepsText').textContent = full ? t('calStepsReady', { n }) : t('calSteps', { n: Math.min(n, 3) });
+  $('calGuide').textContent = full ? t('guideReady')
     : n >= 3 && fit && !fit.ok ? t(fit.reason, { n: fit.n })
     : t(n === 0 ? 'guide0' : n === 1 ? 'guide1' : 'guide2');
   $('goWeighBtn').hidden = !ready;
-  $('calMeasureBtn').className = ready ? 'btn wide mt' : 'btn primary huge mt';   // once ready, weighing is the main next step
+  $('goWeighBtn').className = full ? 'btn primary huge' : 'btn wide';
+  $('calMeasureBtn').className = full ? 'btn wide mt' : 'btn primary huge mt';   // once fully calibrated, weighing is the main next step
   renderCalPicker();
   // simple list of measured weights
   $('calListCard').hidden = !cal.points.length;
@@ -1873,6 +1908,12 @@ function renderCal() {
   const P = (text, cls) => { const p = document.createElement('p'); p.textContent = text; if (cls) p.className = cls; sum.appendChild(p); return p; };
   if (!cal.points.length) { /* nothing */ }
   else if (!fit || !fit.ok) sum.appendChild(alertEl(fit && fit.reason === 'fitNeed' ? 'info' : 'warn', t(fit ? fit.reason : 'fitNeed', { n: fit ? fit.n : 0 })));
+  else if (fit.level !== 'full') {
+    P(fit.level === 'quick' ? t('fitQuick', { m: fmtW(fit.mass) }) : t('fitBasic'), 'best');
+    P(t('fitEq'), 'muted small');
+    const pe = document.createElement('p'); const code = document.createElement('code'); code.className = 'eq'; code.textContent = MODELS[fit.model].eq(fit.p); pe.appendChild(code); sum.appendChild(pe);
+    sum.appendChild(alertEl('info', t('fitFew')));
+  }
   else {
     P(t('fitBest', { m: '@m_' + fit.model, r2: fit.r2.toFixed(4) }), 'best');
     P(t('fitEq'), 'muted small');
@@ -1909,6 +1950,7 @@ function renderSettings() {
     }));
   }
   $('setSound').checked = settings.sound;
+  if (document.activeElement !== $('setMass')) $('setMass').value = fmtW(settings.phoneMass);
 }
 
 function renderDiag() {
@@ -2029,8 +2071,8 @@ function drawFit() {
   const { ctx, W, H } = g, pts = cal.points, fit = currentFit;
   if (!pts.length) { placeholder(ctx, W, H, tp('fitEmpty')); return; }
   const padL = 44, padR = 14, padT = 22, padB = 26, pw = W - padL - padR, ph = H - padT - padB;
-  const xT = niceTicks(Math.max(1, ...pts.map(p => p.w)) * 1.05, 4);
   const est = lastResult && lastResult.est && lastResult.est.w != null ? lastResult : null;
+  const xT = niceTicks(Math.max(1, ...pts.map(p => p.w), fit && fit.ok && fit.level !== 'full' ? fit.wMax : 0, est ? est.est.w || 0 : 0) * 1.05, 4);
   const yT = niceTicks(Math.max(...pts.map(p => p.mean + (p.sd || 0)), est ? est.mean : 0) * 1.1, 4);
   const X = w => padL + clamp(w / xT.max, -0.02, 1.02) * pw, Y = a => padT + ph - (a / yT.max) * ph;
   ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = '#98a2b3'; ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1;
@@ -2084,7 +2126,8 @@ function loop() {
   if (busy.phase === 'run' || busy.phase === 'pause') {
     const tr = traces[area][busy.runIdx];
     const frac = busy.phase === 'pause' ? 1 : (tr && tr.total ? clamp((performance.now() - tr.tStart) / tr.total, 0, 1) : 0);
-    setBar(area, (busy.runIdx + frac) / CFG.repeats);
+    const steps = busy.steps || 1, step = busy.step || 1;
+    setBar(area, ((step - 1) + (busy.runIdx + frac) / CFG.repeats) / steps);
   }
   rafId = requestAnimationFrame(loop);
 }
@@ -2159,7 +2202,6 @@ function init() {
   $('langBtn').addEventListener('click', () => { lang = lang === 'ar' ? 'en' : 'ar'; store.set(KEYS.lang, lang); renderAll(); });
   document.querySelectorAll('nav.tabs button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
   $('calChip').addEventListener('click', () => showTab('cal'));
-  $('setupBtn').addEventListener('click', () => showTab('cal'));
   $('goWeighBtn').addEventListener('click', () => showTab('measure'));
   $('measureBtn').addEventListener('click', () => { if (!busy) startSession('measure'); });
   $('calMeasureBtn').addEventListener('click', () => { if (!busy) startSession('cal'); });
@@ -2176,6 +2218,11 @@ function init() {
   $('exportBtn').addEventListener('click', exportCal);
   $('importBtn').addEventListener('click', () => $('importFile').click());
   $('importFile').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; if (f) importCal(f); e.target.value = ''; });
+  $('setMass').addEventListener('change', e => {
+    const v = parseWeight(e.target.value);
+    if (v != null && v >= 50 && v <= 1000) { settings.phoneMass = v; saveSettings(); refit(); renderChip(); renderCal(); }
+    e.target.value = fmtW(settings.phoneMass);
+  });
   $('setSound').addEventListener('change', e => { settings.sound = e.target.checked; saveSettings(); if (settings.sound) unlockAudio(); });
   $('diagBtn').addEventListener('click', () => { if (diag) stopDiag(); else startDiag(); });
   $('diagVibBtn').addEventListener('click', testVibration);

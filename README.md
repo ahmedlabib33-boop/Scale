@@ -40,20 +40,34 @@ they shake the phone. Calibration and measuring work the same way; vibration len
   haptics through strongly enough — a native iOS app (Core Haptics + Core Motion) would be needed.
 - Expect a wider ± range than on Android (taps are brief, and the sensor only samples ~60 times/s).
 
-## Using it — 3 steps
+## Using it
 
-The app guides you through each step with one big instruction at a time, a countdown, and a beep
-when it's done.
+**No set-up needed.** Tap **Weigh**. The very first time, the app sets itself up:
 
-1. **Set up once (Calibrate tab).** Lay the phone on a firm, level table — **screen down is best**
-   (the camera bump makes a phone rock on its back). The app asks for three known weights, one at a
-   time: first *Empty*, then it suggests 50 g and 200 g. Tap a weight button (Empty, 5, 10, 20, 50,
-   100, 200, 250, 500 g) or type another weight, tap **Measure**, put the weight on the phone during
-   the countdown and take your hand away. After the third weight it says *The scale is ready*.
-2. **Weigh (Weigh tab).** Tap **Weigh**, put the object on the phone, take your hand away.
-3. **Read the result:** the weight, a ± range (≈95 %), and a plain label — *Good accuracy*,
-   *Fair accuracy*, *Rough estimate* or *Outside the weights you calibrated*. Any problem (phone
-   moved, readings disagree, not flat…) is explained in one sentence underneath.
+1. *Step 1 of 2 — "Take everything off the phone".* It measures the empty phone (about 15 s) and
+   remembers it.
+2. *Step 2 of 2 — "Put the object on the phone".* Put it on during the countdown and take your hand
+   away. You get a weight right away.
+
+Without any known weights the app uses physics: the vibration strength falls as
+`A0 / (1 + w / M)`, where `A0` is the empty-phone reading and `M` is the phone's own weight —
+**193 g for the Infinix Hot 60 5G** (change it in *Help → Settings → Phone weight* if you use a
+case). That result is labelled *Rough estimate* with a ±30 % range. After the first time, **Weigh**
+is a single step.
+
+**For better accuracy (optional, Calibrate tab):** measure things whose weight you know. Tap a weight
+button (Empty, 5, 10, 20, 50, 100, 200, 250, 500 g) or type one, tap **Measure**, and put it on the
+phone during the countdown.
+
+| Known weights measured | What the app uses | Typical ± |
+|---|---|---|
+| none (just the automatic empty-phone check) | physics with the phone's weight | ±30 % |
+| 1 | the real curve through the empty phone and that weight | ±15 % |
+| 3 or more | best-fitting curve (linear, 1/x or exponential) | from your data, often ±5–15 % |
+
+Each result shows the weight, a ± range (≈95 %) and a plain label — *Good accuracy*, *Fair
+accuracy*, *Rough estimate* or *Outside the weights you calibrated* — plus a one-line explanation
+of any problem (phone moved, readings disagree, not flat…).
 
 Everything technical is tucked away: *Measurement details* (graph, readings, sensor) on the Weigh
 tab, *Curve, backup and reset* on the Calibrate tab, and *Phone check* / *Settings* / *How it works*

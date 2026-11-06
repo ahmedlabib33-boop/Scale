@@ -35,30 +35,30 @@ they shake the phone. Calibration and measuring work the same way; vibration len
 - Tap **Allow** when asked for motion & orientation access. If you tapped *Don't Allow*, close the
   tab completely and reopen the page.
 - Turn on *Settings → Sounds & Haptics → System Haptics* and turn off Low Power Mode.
-- Run *Sensor check → Test vibration* first: you should feel one tap immediately, and the result
-  should say *detected ✓*. If it says *not detected*, this iPhone/iOS version doesn't pass web
+- Run *Help → Phone check → Test vibration* first: you should feel one tap immediately, and the
+  result should say *✓ Works*. If it says *✗ No taps felt*, this iPhone/iOS version doesn't pass web
   haptics through strongly enough — a native iOS app (Core Haptics + Core Motion) would be needed.
 - Expect a wider ± range than on Android (taps are brief, and the sensor only samples ~60 times/s).
 
-## Test it first (Help & settings tab)
+## Using it — 3 steps
 
-1. **Sensor check → Start sensor.** Expect a sample rate around 60 Hz (Chrome's usual cap),
-   `|a| ≈ 9.8 m/s²`, and low noise (≈ 0.01–0.05 m/s²) while the phone lies still.
-2. **Test vibration.** It should say *detected ✓* with a ratio of ×3 or more. If not: turn on
-   *Settings → Sound & vibration → Vibration & haptics*, and turn off Do Not Disturb, battery saver
-   and any "flip to silence" feature.
-3. If the sensor sends no data: Chrome *⋮ → Settings → Site settings → Motion sensors → Allow*.
-4. Set **Start delay** (default 5 s) — the time you get to place the object after tapping.
+The app guides you through each step with one big instruction at a time, a countdown, and a beep
+when it's done.
 
-## Calibrate (Calibrate tab)
+1. **Set up once (Calibrate tab).** Lay the phone on a firm, level table — **screen down is best**
+   (the camera bump makes a phone rock on its back). The app asks for three known weights, one at a
+   time: first *Empty*, then it suggests 50 g and 200 g. Tap a weight button (Empty, 5, 10, 20, 50,
+   100, 200, 250, 500 g) or type another weight, tap **Measure**, put the weight on the phone during
+   the countdown and take your hand away. After the third weight it says *The scale is ready*.
+2. **Weigh (Weigh tab).** Tap **Weigh**, put the object on the phone, take your hand away.
+3. **Read the result:** the weight, a ± range (≈95 %), and a plain label — *Good accuracy*,
+   *Fair accuracy*, *Rough estimate* or *Outside the weights you calibrated*. Any problem (phone
+   moved, readings disagree, not flat…) is explained in one sentence underneath.
 
-1. Put the phone on a firm, level table — **screen down is recommended** (the camera bump makes a
-   phone rock on its back). Remove the case, or always use the same one.
-2. Enter `0`, tap **Measure 3×**, and don't touch anything until the beep.
-3. Repeat with 4–6 known weights covering the range you care about, e.g. 20, 50, 100, 200, 300 g.
-   Put each weight on the same spot every time (mark it with a small sticker).
-4. The app fits linear, 1/x and exponential curves, keeps the best by R², and shows the curve and the
-   typical error in grams. Re-measure any point whose spread is highlighted in amber.
+Everything technical is tucked away: *Measurement details* (graph, readings, sensor) on the Weigh
+tab, *Curve, backup and reset* on the Calibrate tab, and *Phone check* / *Settings* / *How it works*
+on the Help tab. More weights (5–6 spread over your range) make the scale more accurate; a weight
+marked *⚠ unsteady* should be measured again.
 
 Good reference weights:
 
@@ -71,13 +71,14 @@ Good reference weights:
 Recalibrate after changing the table, phone case, orientation, vibration length, Android vibration
 strength or battery-saver mode. *Export* saves the calibration as JSON; *Import* restores it.
 
-## Measure
+## If something doesn't work (Help tab → Phone check)
 
-Tap **Measure**, place the object during the countdown, let go. The app waits until the phone is
-still, runs 3 vibrations, beeps, and shows the mean weight with a ≈95 % ± range (calibration
-residuals + run-to-run spread). It warns when the reading is **outside the calibrated range**, when
-runs disagree, when the phone moved or isn't flat, or when orientation / sensor rate / vibration
-length differ from the calibration.
+- **Test vibration** should say *✓ Works*. If not: turn on *Settings → Sound & vibration →
+  Vibration & haptics*, and turn off Do Not Disturb, battery saver and any "flip to silence" feature.
+- **Live sensor** should show about 60 Hz and `|a| ≈ 9.8 m/s²` while the phone lies still.
+- If the sensor sends no data: Chrome *⋮ → Settings → Site settings → Motion sensors → Allow*.
+- *Settings* lets you change the time you get to place the object (default 5 s) and the vibration
+  length; keep them the same for calibrating and weighing.
 
 ## How it works
 

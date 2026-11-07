@@ -68,27 +68,18 @@ main{max-width:560px;margin:0 auto;padding:14px 12px}
 .btn.primary{background:var(--accent);border-color:transparent;color:var(--accent-ink)}
 .btn.huge{width:100%;min-height:88px;font-size:26px;border-radius:22px;font-weight:800}
 .btn.wide{width:100%}
-.btn.stop{background:var(--err);border-color:transparent;color:#2a0606}
 .btn.danger{background:transparent;color:var(--err);border-color:rgba(255,107,107,.45)}
 .btn:focus-visible,.pill:focus-visible,.seg button:focus-visible,nav.tabs button:focus-visible,
-.chip:focus-visible,.inp:focus-visible,.icon-btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.inp:focus-visible,.icon-btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .row{display:flex;gap:10px;align-items:stretch}
 .row>*{min-width:0}
 .row.wrap{flex-wrap:wrap}
 .grow{flex:1 1 0}
 .mt{margin-top:12px}
 
-/* calibration chip */
-.chip{display:flex;width:100%;align-items:center;gap:10px;text-align:start;min-height:52px;padding:10px 14px;margin:0 0 12px;
-  border-radius:14px;border:1px solid var(--line);background:var(--surface);font-size:15px;font-weight:600;cursor:pointer;touch-action:manipulation}
-.chip.ok{border-color:rgba(47,209,176,.35);color:#bff3e6;background:var(--accent-soft)}
-.chip.warn{border-color:rgba(243,179,61,.4);color:#ffdf9e;background:var(--warn-soft)}
-.chip::after{content:"\203A";margin-inline-start:auto;font-size:24px;line-height:1;opacity:.7}
-[dir=rtl] .chip::after{content:"\2039"}
 
 /* graph */
 .graph{display:block;width:100%;height:190px;border-radius:12px;background:var(--well)}
-.graph.small{height:150px}
 .legend{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px;font-size:12.5px;color:var(--muted)}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .sw{display:inline-block;width:16px;height:4px;border-radius:2px;background:var(--accent)}
@@ -99,14 +90,9 @@ main{max-width:560px;margin:0 auto;padding:14px 12px}
 .progress{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;margin:0 0 12px}
 .progress .bar{height:100%;width:0;background:var(--accent);transition:width .12s linear}
 
-/* result */
-.result{text-align:center;padding:18px 14px}
-.res-label{color:var(--muted);font-size:15px;font-weight:650}
-.res-row{display:flex;align-items:baseline;justify-content:center;gap:8px;margin:6px 0 2px;flex-wrap:wrap}
 .big{font-size:68px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-1px}
 .unit{font-size:28px;color:var(--muted);font-weight:700}
 .pm{font-size:21px;font-weight:700}
-.pm-note{font-size:13px;color:var(--muted);margin-top:2px}
 .details{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:14px 0 0;text-align:start;font-size:14.5px}
 .details dt{color:var(--muted)}
 .details dd{margin:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
@@ -195,7 +181,6 @@ nav.tabs button[aria-selected="true"]::before{content:"";position:absolute;top:0
 nav.tabs button{position:relative}
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
-@media (min-width:600px){.big{font-size:80px}}
 
 /* ---------- simplified screens ---------- */
 .display{text-align:center;padding:20px 14px 12px;background:linear-gradient(180deg,#171d25,#12171d);border-color:#2c3440}
@@ -210,10 +195,7 @@ nav.tabs button{position:relative}
 .chip-link{display:block;margin:12px auto 0;min-height:44px;padding:8px 14px;border-radius:12px;border:1px solid var(--line);
   background:transparent;color:var(--muted);font-size:14.5px;font-weight:600;cursor:pointer;touch-action:manipulation}
 .chip-link.warn{color:#ffdf9e;border-color:rgba(243,179,61,.4)}
-.setup{border-color:rgba(47,209,176,.45);background:linear-gradient(180deg,rgba(47,209,176,.10),rgba(47,209,176,.03))}
-.setup p{color:#cfd6df}
 .hint.center{text-align:center;margin:10px 8px 0;font-size:15px}
-.btn.link{min-height:48px;background:transparent;border:0;color:var(--muted);text-decoration:underline;font-weight:600;font-size:15.5px;width:100%}
 details.more{padding:0}
 details.more>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:56px;padding:0 16px;
   font-weight:700;font-size:16.5px;cursor:pointer;touch-action:manipulation;border-radius:var(--radius)}
@@ -473,6 +455,8 @@ const EXC = typeof navigator.vibrate === 'function' ? 'motor' : IS_IPHONE ? 'tap
 // Quick set-up (no known weights): vibration strength ≈ A0 / (1 + w / M), with M ≈ the phone's own mass.
 const PHONE_MASS_DEFAULT = 193;   // Infinix Hot 60 5G, per its spec sheet
 const QUICK_WMAX = 500;           // range the quick set-up is trusted for (g)
+const AUTO_MIN_DELAY = 3;          // s, countdown for each step of the automatic first weigh
+const UNSTEADY = ['wSpread', 'wNotStill', 'wMoved', 'wWeakVib'];
 const DEFAULT_SETTINGS = { duration: EXC === 'taps' ? 4000 : 2000, delay: 5, source: 'auto', sound: true, phoneMass: PHONE_MASS_DEFAULT };
 const RUN_COLORS = ['#2fd1b0', '#8ab4ff', '#f3b33d'];
 
@@ -489,6 +473,7 @@ en: {
   chipAuto: 'Sets itself up on the first weigh · calibrate for better accuracy',
   chipQuick: 'Quick set-up (rough) · calibrate for better accuracy',
   chipBasic: 'Set up with 1 known weight · add more for better accuracy',
+  chipProblem: 'Calibration problem (using quick set-up) · tap to fix',
   chipReady: 'Set up with {n} weights · change',
   resTitle: 'Weight', resAmpOnly: 'Vibration strength (scale not set up)',
   resPm: '{e} g ({p})',
@@ -527,7 +512,11 @@ en: {
   wRate: 'The sensor speed changed since calibration ({cal} → {now} Hz). If results look wrong, calibrate again.',
   wDur: 'The vibration length ({now} s) is different from calibration ({cal} s).',
   wNoCal: 'The scale isn’t set up, so this is only the vibration strength, not grams.',
-  wQuick: 'Quick set-up: the app assumes your phone weighs {m} g. For better accuracy, calibrate with 1–2 known weights (Calibrate tab).',
+  wQuick: 'Quick set-up: the app assumes your phone weighs {m} g (change it in Help → Settings). For better accuracy, calibrate with 1–2 known weights (Calibrate tab).',
+  wAboveEmpty: 'The phone vibrated more than when it was empty, so this reads as about 0 g. If something is on it, measure the empty phone again (Calibrate → Empty) — the surface or the phone’s position may have changed.',
+  wCalProblem: 'Your calibration weights didn’t make a usable curve, so this uses the quick set-up. See the Calibrate tab.',
+  emptyUnsteady: 'The empty-phone check wasn’t steady, so nothing was saved. Make sure nothing touches the phone or the table, then tap Weigh again.',
+  bNoStorage: 'This browser isn’t saving data (private mode?), so your calibration will be lost when you close the page.',
   wBasic: 'Calibrated with only 1 known weight. Add another one for better accuracy.',
   wOutOfRangeQuick: 'Heavier than the quick set-up can estimate (about {max} g). Calibrate with a weight close to this one.',
   wExc: 'This calibration was made with {a}, but this device uses {b}. Calibrate again on this device.',
@@ -632,6 +621,7 @@ ar: {
   chipAuto: 'يجهّز نفسه عند أول وزن · عايِر لدقة أفضل',
   chipQuick: 'تجهيز سريع (تقريبي) · عايِر لدقة أفضل',
   chipBasic: 'مُجهّز بوزن معروف واحد · أضف المزيد لدقة أفضل',
+  chipProblem: 'مشكلة في المعايرة (يُستخدم التجهيز السريع) · اضغط للإصلاح',
   chipReady: 'مُجهّز بـ {n} أوزان · تغيير',
   resTitle: 'الوزن', resAmpOnly: 'شدة الاهتزاز (الميزان غير مُجهّز)',
   resPm: '{e} جم ({p})',
@@ -667,7 +657,11 @@ ar: {
   wRate: 'تغيرت سرعة المستشعر منذ المعايرة ({cal} ← {now} هرتز). إذا بدت النتائج خاطئة فأعد المعايرة.',
   wDur: 'مدة الاهتزاز ({now} ث) تختلف عن المعايرة ({cal} ث).',
   wNoCal: 'الميزان غير مُجهّز، لذا هذه شدة الاهتزاز فقط وليست جرامات.',
-  wQuick: 'تجهيز سريع: يفترض التطبيق أن وزن هاتفك {m} جم. لدقة أفضل، عايِر بوزن أو وزنين معروفين (تبويب المعايرة).',
+  wQuick: 'تجهيز سريع: يفترض التطبيق أن وزن هاتفك {m} جم (يمكنك تغييره من مساعدة ← الإعدادات). لدقة أفضل، عايِر بوزن أو وزنين معروفين (تبويب المعايرة).',
+  wAboveEmpty: 'اهتز الهاتف أكثر مما كان وهو فارغ، لذا تُقرأ النتيجة كحوالي 0 جم. إذا كان عليه شيء فأعد قياس الهاتف فارغًا (المعايرة ← فارغ) — ربما تغيّر السطح أو وضع الهاتف.',
+  wCalProblem: 'أوزان المعايرة لم تعطِ منحنى صالحًا، لذا يُستخدم التجهيز السريع. راجع تبويب المعايرة.',
+  emptyUnsteady: 'فحص الهاتف الفارغ لم يكن مستقرًا، لذا لم يُحفظ شيء. تأكد أن لا شيء يلمس الهاتف أو الطاولة، ثم اضغط «ابدأ الوزن» مرة أخرى.',
+  bNoStorage: 'هذا المتصفح لا يحفظ البيانات (وضع التصفح الخاص؟)، لذا ستضيع معايرتك عند إغلاق الصفحة.',
   wBasic: 'تمت المعايرة بوزن معروف واحد فقط. أضف وزنًا آخر لدقة أفضل.',
   wOutOfRangeQuick: 'أثقل مما يستطيع التجهيز السريع تقديره (حوالي {max} جم). عايِر بوزن قريب من هذا الوزن.',
   wExc: 'هذه المعايرة أُجريت باستخدام {a}، لكن هذا الجهاز يستخدم {b}. أعد المعايرة على هذا الجهاز.',
@@ -766,9 +760,11 @@ ar: {
    Small helpers
    ===================================================================== */
 const $ = id => document.getElementById(id);
+let storageBroken = false;   // set when saving fails (private mode, quota, blocked storage)
 const store = {
   get(k, def) { try { const v = localStorage.getItem(k); return v == null ? def : JSON.parse(v); } catch (_) { return def; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (_) { return false; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (_) { storageBroken = true; return false; } },
+  works() { try { const k = 'vibroscale.probe'; localStorage.setItem(k, '1'); localStorage.removeItem(k); return true; } catch (_) { return false; } },
 };
 class AppError extends Error { constructor(code, vars) { super(code); this.code = code; this.vars = vars || {}; } }
 const E = (code, vars) => new AppError(code, vars);
@@ -867,7 +863,7 @@ function sanitizeCal(c) {
   return { version: 1, points };
 }
 function loadCal() { return sanitizeCal(store.get(KEYS.cal, null)) || { version: 1, points: [] }; }
-const saveCal = () => store.set(KEYS.cal, cal);
+const saveCal = () => { if (!store.set(KEYS.cal, cal)) { computeBanners(); renderBanners(); } };
 function calMeta() {
   const p = cal.points;
   return { orient: mode(p.map(x => x.orient)), fs: median(p.map(x => x.fs).filter(x => x > 0)), dur: mode(p.map(x => x.dur)), kind: mode(p.map(x => x.kind)), exc: mode(p.map(x => x.exc)) };
@@ -1111,7 +1107,20 @@ function refineLM(M, xs, ys, p0, lo, hi) {
   return p;
 }
 
+// Always prefer grams: if the known weights can't be fitted but an empty-phone reading exists,
+// fall back on the quick (physics) model and report why.
 function fitCalibration(points, phoneMass = PHONE_MASS_DEFAULT) {
+  const r = fitCore(points, phoneMass);
+  if (r.ok || r.reason === 'fitNeed') return r;
+  const e = points.find(p => p.mean > 0 && sameW(p.w, 0));
+  return e ? Object.assign(quickFit(e, points.length, r.n, phoneMass), { problem: r.reason }) : r;
+}
+function quickFit(e, n, distinct, phoneMass) {
+  const A0 = e.mean;
+  return { ok: true, level: 'quick', n, distinct, model: 'inverse', r2: null, rmseW: null, models: [], sA: Math.max(e.sd || 0, 0.01 * A0),
+    wMin: 0, increasing: false, p: [1 / A0, 1 / (A0 * phoneMass)], mass: phoneMass, wMax: QUICK_WMAX, aMax: A0, aMin: A0 / (1 + QUICK_WMAX / phoneMass), relErr: 0.30 };
+}
+function fitCore(points, phoneMass) {
   const pts = points.filter(p => p.mean > 0 && isFinite(p.w));
   const distinct = new Set(pts.map(p => p.w)).size;
   if (distinct < 3) {
@@ -1120,10 +1129,10 @@ function fitCalibration(points, phoneMass = PHONE_MASS_DEFAULT) {
     const e = pts.find(p => sameW(p.w, 0));
     if (!e) return { ok: false, reason: 'fitNeed', n: distinct };
     const A0 = e.mean, other = pts.find(p => !sameW(p.w, 0));
-    const base = { ok: true, n: pts.length, distinct, model: 'inverse', r2: null, rmseW: null, models: [], sA: Math.max(e.sd || 0, 0.01 * A0), wMin: 0, increasing: false };
-    if (!other) return Object.assign(base, { level: 'quick', p: [1 / A0, 1 / (A0 * phoneMass)], mass: phoneMass, wMax: QUICK_WMAX, aMax: A0, aMin: A0 / (1 + QUICK_WMAX / phoneMass), relErr: 0.30 });
+    const quick = quickFit(e, pts.length, distinct, phoneMass);
+    if (!other) return quick;
     if (!(other.mean < A0)) return { ok: false, reason: 'fitFlat', n: distinct };
-    return Object.assign(base, { level: 'basic', p: [1 / A0, (1 / other.mean - 1 / A0) / other.w], wMax: other.w, aMax: A0, aMin: other.mean, relErr: 0.15 });
+    return Object.assign(quick, { level: 'basic', mass: undefined, p: [1 / A0, (1 / other.mean - 1 / A0) / other.w], wMax: other.w, aMin: other.mean, relErr: 0.15 });
   }
   const xs = pts.map(p => p.w), ys = pts.map(p => p.mean), n = pts.length;
   const lo = Math.min(...xs), hi = Math.max(...xs);
@@ -1443,7 +1452,8 @@ async function startSession(area) {
     acquireWakeLock();
     const measureOnce = async () => {
       busy.phase = 'countdown'; busy.runIdx = -1; traces[area] = [];
-      for (let s = settings.delay; s > 0; s--) {
+      // the two-step first weigh always needs time to put the object down, even with "None" chosen
+      for (let s = busy.auto ? Math.max(settings.delay, AUTO_MIN_DELAY) : settings.delay; s > 0; s--) {
         setStatus(area, 'stCountdown', { s });
         beep('tick');
         await wait(1000, ctrl.signal);
@@ -1473,7 +1483,9 @@ async function startSession(area) {
     if (area === 'measure' && needsEmpty()) {
       // First weigh ever: measure the empty phone (step 1 of 2), keep it as the 0 g point, then weigh.
       Object.assign(busy, { auto: true, step: 1, steps: 2, weight: 0 });
-      finishCal(await measureOnce(), 0);
+      const empty = await measureOnce();
+      if (empty.warnings.some(w => UNSTEADY.includes(w.k))) throw E('emptyUnsteady');   // don't build on a bad baseline
+      finishCal(empty, 0, true);
       Object.assign(busy, { step: 2, weight: null });
     }
     const res = await measureOnce();
@@ -1524,14 +1536,20 @@ function summarizeRuns(runs, still, kind) {
 }
 
 function finishMeasure(res) {
-  const out = Object.assign({}, res, { est: null, runW: null, warnings: res.warnings.slice() });
+  const out = Object.assign({}, res, { raw: res, est: null, runW: null, warnings: res.warnings.slice() });
   const fit = currentFit;
   if (fit && fit.ok) {
     const M = MODELS[fit.model];
     out.est = estimateWeight(fit, res.mean, res.sem);
     out.runW = res.used.map(r => M.inv(r.rms, fit.p));
     out.level = fit.level;
-    if (out.est.outOfRange) out.warnings.unshift(fit.level === 'quick' ? { k: 'wOutOfRangeQuick', v: { max: fmtW(fit.wMax) } } : { k: 'wOutOfRange', v: { range: `${fmtW(fit.wMin)}–${fmtW(fit.wMax)}` } });
+    if (out.est.outOfRange) {
+      const aboveEmpty = !fit.increasing && fit.wMin === 0 && res.mean > fit.aMax;   // vibrates more than the empty phone did
+      out.warnings.unshift(aboveEmpty ? { k: 'wAboveEmpty' }
+        : fit.level === 'quick' ? { k: 'wOutOfRangeQuick', v: { max: fmtW(fit.wMax) } }
+        : { k: 'wOutOfRange', v: { range: `${fmtW(fit.wMin)}–${fmtW(fit.wMax)}` } });
+    }
+    if (fit.problem) out.warnings.push({ k: 'wCalProblem' });
     if (fit.level === 'quick') out.warnings.push({ k: 'wQuick', kind: 'info', v: { m: fmtW(fit.mass) } });
     else if (fit.level === 'basic') out.warnings.push({ k: 'wBasic', kind: 'info' });
     const cm = calMeta();
@@ -1547,7 +1565,7 @@ function finishMeasure(res) {
   drawFit();
 }
 
-function finishCal(res, weight) {
+function finishCal(res, weight, quiet) {
   const pt = {
     w: weight, mean: res.mean, amps: res.amps.map(a => +a.toPrecision(6)), sd: res.sd,
     fs: +res.fs.toFixed(2), orient: res.orient, kind: res.kind, dur: settings.duration,
@@ -1558,7 +1576,7 @@ function finishCal(res, weight) {
   cal.points.sort((a, b) => a.w - b.w);
   saveCal();
   refit();
-  calNote = { kind: 'ok', k: 'calAdded', v: { w: fmtW(weight), a: fmtA(res.mean), cv: (res.cv * 100).toFixed(1) }, warnings: res.warnings };
+  if (!quiet) calNote = { kind: 'ok', k: 'calAdded', v: { w: fmtW(weight), a: fmtA(res.mean), cv: (res.cv * 100).toFixed(1) }, warnings: res.warnings };
   preselectNextWeight();
   renderCal();
   renderChip();
@@ -1703,6 +1721,7 @@ function computeBanners() {
   if (blocker) banners.push({ kind: 'err', k: blocker.code, v: blocker.vars });
   else if (EXC === 'taps') banners.push({ kind: 'info', k: 'bIOS' });
   if (permState === 'denied') banners.push({ kind: 'err', k: 'permDenied' });
+  if (storageBroken) banners.push({ kind: 'warn', k: 'bNoStorage' });
   if (!banners.length && !/Android/i.test(UA)) banners.push({ kind: 'info', k: 'bNotAndroid' });
 }
 function renderBanners() { $('banners').replaceChildren(...banners.map(b => alertEl(b.kind, t(errKey(b.k), b.v)))); }
@@ -1717,7 +1736,8 @@ function preselectNextWeight() { const s = suggestNextWeight(); $('calWeight').v
 function renderChip() {
   const chip = $('calChip'), fit = currentFit, level = calReady() ? fit.level : null;
   chip.className = level === 'full' ? 'chip-link' : 'chip-link warn';
-  chip.textContent = level === 'full' ? t('chipReady', { n: fit.distinct }) : level === 'basic' ? t('chipBasic') : level === 'quick' ? t('chipQuick') : t('chipAuto');
+  chip.textContent = fit && fit.problem ? t('chipProblem')
+    : level === 'full' ? t('chipReady', { n: fit.distinct }) : level === 'basic' ? t('chipBasic') : level === 'quick' ? t('chipQuick') : t('chipAuto');
   $('measureBtn').textContent = t('measureBtn');
   $('measHint').textContent = needsEmpty() ? t('measHintFirst') : t('measHint');
 }
@@ -1732,10 +1752,18 @@ function setBar(area, f) { $('ovBar').style.width = (clamp(f, 0, 1) * 100).toFix
 
 // Full-screen step guide shown while measuring: one big instruction at a time.
 function renderOverlay() {
-  const ov = $('overlay');
-  if (!busy) { ov.hidden = true; document.body.classList.remove('ov-open'); return; }
+  const ov = $('overlay'), bg = document.querySelectorAll('body > header, body > main, body > nav, #banners');
+  if (!busy) {
+    if (!ov.hidden) {
+      ov.hidden = true; document.body.classList.remove('ov-open'); bg.forEach(el => { el.inert = false; });
+      if (returnFocus && document.contains(returnFocus) && !returnFocus.disabled) returnFocus.focus();
+      returnFocus = null;
+    }
+    return;
+  }
   const firstShow = ov.hidden;
-  ov.hidden = false; document.body.classList.add('ov-open');
+  if (firstShow) returnFocus = document.activeElement;
+  ov.hidden = false; document.body.classList.add('ov-open'); bg.forEach(el => { el.inert = true; });
   const area = busy.mode, w = busy.weight, s = statuses[area] || {}, v = s.v || {};
   $('ovStep').textContent = busy.auto ? t(busy.step === 1 ? 'ovAutoStep1' : 'ovAutoStep2')
     : area === 'measure' ? t('ovStepWeigh') : w === 0 ? t('ovStepCalEmpty') : t('ovStepCal', { w: fmtW(w) });
@@ -1775,7 +1803,7 @@ function setBusyUI() {
 }
 
 function qualityOf(est, level) {
-  if (est.outOfRange) return level === 'quick' ? 'rough' : 'out';
+  if (est.outOfRange) return level === 'full' || level === 'basic' ? 'out' : 'rough';
   if (est.w == null || est.err == null) return 'rough';
   const rel = est.err / Math.max(est.w, 1);
   return rel <= 0.06 ? 'good' : rel <= 0.15 ? 'ok' : 'rough';
@@ -1858,7 +1886,7 @@ function renderCal() {
   // progress + one instruction at a time
   [...$('calBar3').children].forEach((el, i) => el.classList.toggle('on', i < Math.min(n, 3)));
   $('calStepsText').textContent = full ? t('calStepsReady', { n }) : t('calSteps', { n: Math.min(n, 3) });
-  $('calGuide').textContent = full ? t('guideReady')
+  $('calGuide').textContent = fit && fit.problem ? t(fit.problem, { n: fit.distinct }) : full ? t('guideReady')
     : n >= 3 && fit && !fit.ok ? t(fit.reason, { n: fit.n })
     : t(n === 0 ? 'guide0' : n === 1 ? 'guide1' : 'guide2');
   $('goWeighBtn').hidden = !ready;
@@ -1909,6 +1937,7 @@ function renderCal() {
   if (!cal.points.length) { /* nothing */ }
   else if (!fit || !fit.ok) sum.appendChild(alertEl(fit && fit.reason === 'fitNeed' ? 'info' : 'warn', t(fit ? fit.reason : 'fitNeed', { n: fit ? fit.n : 0 })));
   else if (fit.level !== 'full') {
+    if (fit.problem) sum.appendChild(alertEl('warn', t(fit.problem, { n: fit.distinct })));
     P(fit.level === 'quick' ? t('fitQuick', { m: fmtW(fit.mass) }) : t('fitBasic'), 'best');
     P(t('fitEq'), 'muted small');
     const pe = document.createElement('p'); const code = document.createElement('code'); code.className = 'eq'; code.textContent = MODELS[fit.model].eq(fit.p); pe.appendChild(code); sum.appendChild(pe);
@@ -2117,6 +2146,7 @@ function drawAll() {
   drawFit();
 }
 
+let returnFocus = null;   // element to focus again when the step guide closes
 let rafId = 0;
 function loop() {
   rafId = 0;
@@ -2194,6 +2224,7 @@ async function watchPermission() {
 }
 
 function init() {
+  if (!store.works()) storageBroken = true;
   refit();
   preselectNextWeight();
   computeBanners();
@@ -2206,7 +2237,11 @@ function init() {
   $('measureBtn').addEventListener('click', () => { if (!busy) startSession('measure'); });
   $('calMeasureBtn').addEventListener('click', () => { if (!busy) startSession('cal'); });
   $('ovCancel').addEventListener('click', cancelSession);
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && busy) cancelSession(); });
+  document.addEventListener('keydown', e => {
+    if (!busy) return;
+    if (e.key === 'Escape') cancelSession();
+    else if (e.key === 'Tab') { e.preventDefault(); $('ovCancel').focus(); }   // Cancel is the only control in the guide
+  });
   $('calWeight').addEventListener('input', () => { errors.cal = null; renderMessages(); renderCalPicker(); });
   $('calWeight').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); if (!busy) startSession('cal'); } });
   $('resetBtn').addEventListener('click', () => {
@@ -2220,7 +2255,10 @@ function init() {
   $('importFile').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; if (f) importCal(f); e.target.value = ''; });
   $('setMass').addEventListener('change', e => {
     const v = parseWeight(e.target.value);
-    if (v != null && v >= 50 && v <= 1000) { settings.phoneMass = v; saveSettings(); refit(); renderChip(); renderCal(); }
+    if (v != null && v >= 50 && v <= 1000 && v !== settings.phoneMass) {
+      settings.phoneMass = v; saveSettings(); refit(); renderChip(); renderCal();
+      if (lastResult && lastResult.raw && lastResult.level === 'quick') finishMeasure(lastResult.raw);   // re-estimate with the new weight
+    }
     e.target.value = fmtW(settings.phoneMass);
   });
   $('setSound').addEventListener('change', e => { settings.sound = e.target.checked; saveSettings(); if (settings.sound) unlockAudio(); });
@@ -2238,6 +2276,10 @@ function init() {
   window.addEventListener('resize', () => { if (!resizeRaf) resizeRaf = requestAnimationFrame(() => { resizeRaf = 0; drawAll(); }); });
   watchPermission();
 }
+
+// Last line of defence: an unexpected error during a measurement ends it cleanly instead of freezing the guide.
+window.addEventListener('error', () => { if (busy) busy.ctrl.abort(E('sensorErr', { msg: 'unexpected error' })); });
+window.addEventListener('unhandledrejection', () => { if (busy) busy.ctrl.abort(E('sensorErr', { msg: 'unexpected error' })); });
 
 // Exposed for debugging from the console / automated tests.
 window.VibroScale = { CFG, MODELS, fitCalibration, estimateWeight, analyzeRun, parseWeight, get calibration() { return cal; }, get fit() { return currentFit; }, get lastResult() { return lastResult; } };

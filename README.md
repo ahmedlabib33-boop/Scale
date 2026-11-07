@@ -104,3 +104,7 @@ strength or battery-saver mode. *Export* saves the calibration as JSON; *Import*
 - Amplitude = RMS of the filtered vector over the vibration minus its first and last 0.3 s.
   An FFT gives the dominant frequency — at ~60 Hz sampling this is an aliased (apparent) value.
 - A run counts as "vibrating" only if its RMS is > 2× the pre-vibration noise floor.
+
+## Tests
+
+Automated browser tests with simulated sensors live in [`tests/`](tests/README.md). Run them with `tests/run.sh`.
